@@ -1,12 +1,12 @@
 // @ts-ignore
-import Autopass from "autopass";
+import Autopass from 'autopass';
 // @ts-ignore
-import Corestore from "corestore";
+import Corestore from 'corestore';
 
-import { DataService } from "../services/DataService";
-import { AppSnapshot } from "../services/DataService";
+import { DataService } from '../services/DataService';
+import { AppSnapshot } from '../services/DataService';
 
-const SNAPSHOT_KEY = "state:snapshot";
+const SNAPSHOT_KEY = 'state:snapshot';
 
 class P2PAutopassAdapter {
   private atpass: any | null = null;
@@ -30,8 +30,8 @@ class P2PAutopassAdapter {
     };
   }
 
-  public async connectAsCreator(dataService: DataService, storagePath = "./.p2p-store"): Promise<string> {
-    if (this.connected) throw new Error("P2P ya conectado");
+  public async connectAsCreator(dataService: DataService, storagePath = './.p2p-store'): Promise<string> {
+    if (this.connected) throw new Error('P2P ya conectado');
 
     this.crstore = new Corestore(storagePath);
     this.atpass = new Autopass(this.crstore);
@@ -48,8 +48,8 @@ class P2PAutopassAdapter {
     return invite;
   }
 
-  public async connectAsInvitee(dataService: DataService, inviteCode: string, storagePath = "./.p2p-store"): Promise<void> {
-    if (this.connected) throw new Error("P2P ya conectado");
+  public async connectAsInvitee(dataService: DataService, inviteCode: string, storagePath = './.p2p-store'): Promise<void> {
+    if (this.connected) throw new Error('P2P ya conectado');
 
     this.crstore = new Corestore(storagePath);
     const pair = Autopass.pair(this.crstore, inviteCode);
@@ -65,9 +65,9 @@ class P2PAutopassAdapter {
   }
 
   private async setupReplication(dataService: DataService): Promise<void> {
-    if (!this.atpass) throw new Error("Autopass no inicializado");
+    if (!this.atpass) throw new Error('Autopass no inicializado');
 
-    this.atpass.on("update", async () => {
+    this.atpass.on('update', async () => {
       await this.consumeLatestSnapshotIfAny(dataService);
     });
 
@@ -102,7 +102,7 @@ class P2PAutopassAdapter {
       const snapshot = JSON.parse(latestRaw) as AppSnapshot;
       dataService.replaceStateFromSnapshot(snapshot);
     } catch (err) {
-      console.error("Error parseando snapshot remoto:", err);
+      console.error('Error parseando snapshot remoto:', err);
     }
   }
 
