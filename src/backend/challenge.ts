@@ -1,4 +1,4 @@
-import { Task } from "./task.ts"
+import { Task } from "./task"
 
 export class Challenge extends Task {
     private winCondition: string;

@@ -1,5 +1,5 @@
-import { Group } from "./group.ts"
-import { FriendRequest } from "./friendRequest.ts"
+import { Group } from "./group"
+import { FriendRequest } from "./friendRequest"
 
 export class User {
     private static nextId: number = 0;

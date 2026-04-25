@@ -1,5 +1,5 @@
-import { Task } from "./task.ts"
-import { User } from "./user.ts"
+import { Task } from "./task"
+import { User } from "./user"
 
 export class Group {
     private static nextId: number = 0;
@@ -17,7 +17,7 @@ export class Group {
         this.users = [];
     }
 
-    public getId(): number { return this.id; }
+    public get Id(): number { return this.id; }
 
     public get Name(): string { return this.name; }
     public set Name(value: string) { this.name = value; }
