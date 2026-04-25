@@ -1,0 +1,38 @@
+{
+  "name": "tasks_seamless_coop",
+  "version": "1.0.0",
+  "description": "",
+  "main": "vite.config.js",
+  "scripts": {
+    "dev:frontend": "npm --prefix src/frontend run dev",
+    "dev:p2p": "tsx src/p2p/node-server.ts",
+    "dev:all": "concurrently \"npm run dev:p2p\" \"npm run dev:frontend\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fragi0/Tasks_Seamless_Coop.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fragi0/Tasks_Seamless_Coop/issues"
+  },
+  "homepage": "https://github.com/fragi0/Tasks_Seamless_Coop#readme",
+  "dependencies": {
+    "autopass": "^3.4.1",
+    "corestore": "^7.9.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
