@@ -22,5 +22,3 @@ export class User {
         this.requests = [];
     }
 };
-
-

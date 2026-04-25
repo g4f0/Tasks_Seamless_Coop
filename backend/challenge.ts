@@ -16,4 +16,6 @@ class Challenge extends Task {
         this.statA = statA;
         this.statB = statB;
     }
+    
+
 }
