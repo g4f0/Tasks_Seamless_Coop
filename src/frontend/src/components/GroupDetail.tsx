@@ -27,7 +27,6 @@ const GroupDetail: React.FC = () => {
   const [loseCondition, setLoseCondition] = useState("");
   const [statB, setStatB] = useState(100);
 
-  const [joinCode, setJoinCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [p2pConnected, setP2pConnected] = useState(false);
   const [p2pMsg, setP2pMsg] = useState("");
@@ -47,22 +46,50 @@ const GroupDetail: React.FC = () => {
     [group.Tasks]
   );
 
+  // Auto-connect P2P del grupo (demo stable)
   useEffect(() => {
     let mounted = true;
-    const fetchStatus = async () => {
+    const key = `p2p-invite-${groupId}`;
+
+    const boot = async () => {
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          await joinGroupSession(groupId, saved);
+          if (!mounted) return;
+          setInviteCode(saved);
+          setP2pConnected(true);
+          setP2pMsg("Sincronización activa (join automático).");
+        } else {
+          const created = await createGroupSession(groupId);
+          const code = created.inviteCode ?? "";
+          localStorage.setItem(key, code);
+          if (!mounted) return;
+          setInviteCode(code);
+          setP2pConnected(true);
+          setP2pMsg("Sincronización activa (sesión creada automáticamente).");
+          await publishGroupSnapshot(groupId, dataService.exportSnapshot());
+        }
+      } catch (e: any) {
+        if (!mounted) return;
+        setP2pConnected(false);
+        setP2pMsg(`P2P no disponible: ${e?.message ?? "error"}`);
+      }
+    };
+
+    boot();
+
+    const statusTimer = setInterval(async () => {
       try {
         const st = await getGroupStatus(groupId);
         if (!mounted) return;
         setP2pConnected(!!st.connected);
-        if (st.inviteCode) setInviteCode(st.inviteCode);
+        if (st.inviteCode && !inviteCode) setInviteCode(st.inviteCode);
       } catch {
         if (!mounted) return;
         setP2pConnected(false);
       }
-    };
-
-    fetchStatus();
-    const timer = setInterval(fetchStatus, 3000);
+    }, 4000);
 
     const unsubWs = onGroupSnapshot((gid, snapshot) => {
       if (gid !== groupId) return;
@@ -71,37 +98,27 @@ const GroupDetail: React.FC = () => {
 
     const unsubData = dataService.subscribe(async () => {
       if (!p2pConnected || dataService.isApplyingRemoteUpdate) return;
-      const snap = dataService.exportSnapshot();
-      await publishGroupSnapshot(groupId, snap);
+      try {
+        await publishGroupSnapshot(groupId, dataService.exportSnapshot());
+      } catch {
+        // silencioso para estabilidad demo
+      }
     });
 
     return () => {
       mounted = false;
-      clearInterval(timer);
+      clearInterval(statusTimer);
       unsubWs();
       unsubData();
     };
-  }, [groupId, dataService, p2pConnected]);
+  }, [groupId, dataService, p2pConnected, inviteCode]);
 
-  const handleCreateSession = async () => {
+  const copyInvite = async () => {
     try {
-      const r = await createGroupSession(groupId);
-      setInviteCode(r.inviteCode ?? "");
-      setP2pConnected(true);
-      setP2pMsg("Sesión P2P del grupo creada.");
-      await publishGroupSnapshot(groupId, dataService.exportSnapshot());
-    } catch (e: any) {
-      setP2pMsg(e.message);
-    }
-  };
-
-  const handleJoinSession = async () => {
-    try {
-      await joinGroupSession(groupId, joinCode.trim());
-      setP2pConnected(true);
-      setP2pMsg("Conectado al grupo P2P.");
-    } catch (e: any) {
-      setP2pMsg(e.message);
+      await navigator.clipboard.writeText(inviteCode);
+      setP2pMsg("Código copiado al portapapeles.");
+    } catch {
+      setP2pMsg("No se pudo copiar el código.");
     }
   };
 
@@ -162,18 +179,14 @@ const GroupDetail: React.FC = () => {
       </div>
 
       <div className="card side-card" style={{ marginBottom: 12 }}>
-        <h3>🔗 Sincronización P2P del grupo</h3>
-        <p>Estado: <strong>{p2pConnected ? "Conectado" : "Desconectado"}</strong></p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={handleCreateSession}>Crear sesión de este grupo</button>
-          <input
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value)}
-            placeholder="Código de invitación"
-          />
-          <button onClick={handleJoinSession}>Unirme con código</button>
-        </div>
-        {inviteCode && <p>Invite code: <code>{inviteCode}</code></p>}
+        <h3>🔗 Sync de grupo</h3>
+        <p>Estado: <strong>{p2pConnected ? "ON" : "OFF"}</strong></p>
+        {inviteCode && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <code style={{ userSelect: "all" }}>{inviteCode}</code>
+            <button onClick={copyInvite}>Copiar código</button>
+          </div>
+        )}
         {p2pMsg && <p>{p2pMsg}</p>}
       </div>
 
