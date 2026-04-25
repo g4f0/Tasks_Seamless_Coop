@@ -1,6 +1,6 @@
 import { Task } from "./task.ts"
 
-class Challenge extends Task {
+export class Challenge extends Task {
     private winCondition: string;
     private loseCondition: string;
     private statA: number;

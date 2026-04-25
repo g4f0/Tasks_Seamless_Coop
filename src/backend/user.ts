@@ -22,7 +22,6 @@ export class User {
     }
 
     public get Id(): number { return this.id; }
-    public set Id(value: number) { this.id = value; }
 
     public get Name(): string { return this.name; }
     public set Name(value: string) { this.name = value; }

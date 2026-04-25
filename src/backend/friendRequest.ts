@@ -13,7 +13,6 @@ export class FriendRequest {
     }
 
     public get Id(): number { return this.id; }
-    public set Id(value: number) { this.id = value; }
 
     public get IdUserSrc(): number { return this.idUserSrc; }
     public set IdUserSrc(value: number) { this.idUserSrc = value; }
