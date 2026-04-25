@@ -4,17 +4,30 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev:p2p": "tsx ../p2p/node-server.ts",
+    "dev:all": "concurrently \"npm run dev:p2p\" \"npm run dev\""
   },
   "dependencies": {
+    "autopass": "^3.4.1",
     "axios": "^1.6.0",
+    "corestore": "^7.9.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.30.3"
+    "react-router-dom": "^6.30.3",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^9.2.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vite": "^5.0.0"
   }
 }

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDataService } from '../../../services/DataContext';
+import { useDataService, useDataObserver } from '../../../services/DataContext';
 import { FriendRequest } from '../../../backend/friendRequest';
 import './Header.css';
 
 const Header: React.FC = () => {
+  useDataObserver();
   const navigate = useNavigate();
   const dataService = useDataService();
   const currentUser = dataService.currentUser;
@@ -32,13 +33,15 @@ const Header: React.FC = () => {
     navigate(path);
   };
 
-  const removeRequest = (id: number) => {
-    dataService.friendRequests = dataService.friendRequests.filter(r => r.Id !== id);
-  };
-
   const getRequesterName = (req: FriendRequest): string => {
     const user = dataService.users.find(u => u.Id === req.IdUserSrc);
     return user ? user.Name : 'Desconocido';
+  };
+
+  const handleLogout = () => {
+    dataService.logout();
+    setShowUserMenu(false);
+    navigate('/auth');
   };
 
   return (
@@ -66,10 +69,8 @@ const Header: React.FC = () => {
                   <div key={req.Id} className="dropdown-row">
                     <span>🛡️ {getRequesterName(req)}</span>
                     <div className="row-actions">
-                      <button className="mini-btn ok" onClick={() => {
-                        dataService.acceptFriendRequest(req.Id);
-                      }}>✅</button>
-                      <button className="mini-btn no" onClick={() => removeRequest(req.Id)}>❌</button>
+                      <button className="mini-btn ok" onClick={() => dataService.acceptFriendRequest(req.Id)}>✅</button>
+                      <button className="mini-btn no" onClick={() => dataService.rejectFriendRequest(req.Id)}>❌</button>
                     </div>
                   </div>
                 ))
@@ -88,9 +89,12 @@ const Header: React.FC = () => {
               <button className="menu-link" onClick={() => handleAction('/mi-perfil')}>
                 🖼️ Ver mi Perfil
               </button>
-              <div className="divider"></div>
               <button className="menu-link auth-link" onClick={() => handleAction('/auth')}>
-                🔑 Iniciar Sesión / Registro
+                🔑 Auth
+              </button>
+              <div className="divider"></div>
+              <button className="menu-link" onClick={handleLogout}>
+                🚪 Cerrar sesión
               </button>
             </div>
           )}

@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDataService, useDataObserver } from '../../../services/DataContext';
 import { Challenge } from '../../../backend/challenge';
+import { Event } from '../../../backend/event';
 import './GroupDetail.css';
+
+type CreateType = "Task" | "Event" | "Challenge";
 
 const GroupDetail: React.FC = () => {
   useDataObserver();
@@ -13,10 +16,29 @@ const GroupDetail: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [inputAmounts, setInputAmounts] = useState<Record<number, number>>({});
 
+  const [createType, setCreateType] = useState<CreateType>("Task");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState(1);
+  const [endDate, setEndDate] = useState<string>("");
+  const [winCondition, setWinCondition] = useState("");
+  const [loseCondition, setLoseCondition] = useState("");
+  const [statB, setStatB] = useState(100);
+
   if (!group) return <div>Gremio no encontrado</div>;
 
-  const tasks = group.Tasks.filter(t => !(t instanceof Challenge));
-  const challenges = group.Tasks.filter(t => t instanceof Challenge) as Challenge[];
+  const tasks = useMemo(
+    () => group.Tasks.filter(t => !(t instanceof Challenge) && !(t instanceof Event)),
+    [group.Tasks]
+  );
+  const events = useMemo(
+    () => group.Tasks.filter(t => t instanceof Event) as Event[],
+    [group.Tasks]
+  );
+  const challenges = useMemo(
+    () => group.Tasks.filter(t => t instanceof Challenge) as Challenge[],
+    [group.Tasks]
+  );
 
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -40,17 +62,44 @@ const GroupDetail: React.FC = () => {
     if (challenge) {
       challenge.StatA += val;
       setInputAmounts({ ...inputAmounts, [challengeId]: 0 });
+      dataService.emit();
     }
+  };
+
+  const handleCreateItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    const date = endDate ? new Date(endDate) : new Date();
+
+    if (createType === "Task") {
+      dataService.addTaskToGroup(group.Id, { name, description, priority, endDate: date });
+    } else if (createType === "Event") {
+      dataService.addEventToGroup(group.Id, { name, description, priority, endDate: date });
+    } else {
+      dataService.addChallengeToGroup(group.Id, {
+        name,
+        description,
+        priority,
+        endDate: date,
+        winCondition,
+        loseCondition,
+        statA: 0,
+        statB
+      });
+    }
+
+    setName("");
+    setDescription("");
+    setPriority(1);
+    setEndDate("");
+    setWinCondition("");
+    setLoseCondition("");
+    setStatB(100);
   };
 
   return (
     <div className="group-detail">
       <div className="header-detail">
         <h2>🏠 {group.Name}</h2>
-        <div className="detail-tabs">
-          <button className="tab-btn active"><span className="icon">📅</span> Dashboard</button>
-          <button className="tab-btn"><span className="icon">👥</span> Miembros</button>
-        </div>
       </div>
 
       <div className="group-main-layout">
@@ -66,23 +115,63 @@ const GroupDetail: React.FC = () => {
           <div className="calendar-grid">
             {[...Array(startingDay)].map((_, i) => <div key={`s-${i}`} className="calendar-day empty"></div>)}
             {[...Array(totalDays)].map((_, i) => (
-              <div key={i+1} className="calendar-day"><span className="day-number">{i + 1}</span></div>
+              <div key={i + 1} className="calendar-day"><span className="day-number">{i + 1}</span></div>
             ))}
             {[...Array(trailingDays)].map((_, i) => <div key={`e-${i}`} className="calendar-day empty"></div>)}
+          </div>
+
+          <div className="card side-card" style={{ marginTop: 16 }}>
+            <h3>👥 Miembros</h3>
+            <ul className="list-items">
+              {group.Users.map(u => <li key={u.Id}>👤 {u.Name}</li>)}
+            </ul>
           </div>
         </section>
 
         <aside className="sidebar-section">
           <div className="card side-card">
-            <div className="side-header">
-              <h3>✅ Checklist</h3>
-              <button className="btn-add">+</button>
-            </div>
+            <h3>➕ Añadir item al grupo</h3>
+            <form onSubmit={handleCreateItem} className="challenge-controls-custom">
+              <select value={createType} onChange={(e) => setCreateType(e.target.value as CreateType)}>
+                <option value="Task">Tarea</option>
+                <option value="Event">Evento</option>
+                <option value="Challenge">Reto</option>
+              </select>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" required />
+              <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descripción" required />
+              <input type="number" min={1} max={3} value={priority} onChange={(e) => setPriority(Number(e.target.value))} placeholder="Prioridad" />
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+
+              {createType === "Challenge" && (
+                <>
+                  <input value={winCondition} onChange={(e) => setWinCondition(e.target.value)} placeholder="Win condition" required />
+                  <input value={loseCondition} onChange={(e) => setLoseCondition(e.target.value)} placeholder="Lose condition" required />
+                  <input type="number" min={1} value={statB} onChange={(e) => setStatB(Number(e.target.value))} placeholder="Objetivo (statB)" />
+                </>
+              )}
+
+              <button type="submit">Crear</button>
+            </form>
+          </div>
+
+          <div className="card side-card">
+            <h3>📝 Tareas</h3>
             <ul className="list-items">
               {tasks.map(task => (
                 <li key={task.Id} className={task.Checked === 1 ? 'completed' : ''}>
                   <input type="checkbox" checked={task.Checked === 1} onChange={() => toggleTask(task.Id)} />
                   <span>{task.Name}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card side-card">
+            <h3>📅 Eventos</h3>
+            <ul className="list-items">
+              {events.map(ev => (
+                <li key={ev.Id}>
+                  <span>{ev.Name} — {ev.EndDate.toLocaleDateString()}</span>
                 </li>
               ))}
             </ul>
@@ -98,6 +187,7 @@ const GroupDetail: React.FC = () => {
                     <span>{ch.Name}</span>
                     <span>{ch.StatA}/{ch.StatB}</span>
                   </div>
+                  <small>{ch.WinCondition} / {ch.LoseCondition}</small>
                   <div className="progress-bar">
                     <div className="progress" style={{ width: `${percent}%` }}></div>
                   </div>
@@ -105,7 +195,7 @@ const GroupDetail: React.FC = () => {
                     <input
                       type="number"
                       value={inputAmounts[ch.Id] || ''}
-                      onChange={(e) => setInputAmounts({...inputAmounts, [ch.Id]: Number(e.target.value)})}
+                      onChange={(e) => setInputAmounts({ ...inputAmounts, [ch.Id]: Number(e.target.value) })}
                       placeholder="Cant."
                     />
                     <button onClick={() => updateChallenge(ch.Id)}>Añadir</button>

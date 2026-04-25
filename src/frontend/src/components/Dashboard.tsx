@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDataService, useDataObserver } from '../../../services/DataContext';
 import { Challenge } from '../../../backend/challenge';
+import { Event } from '../../../backend/event';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
@@ -12,7 +13,11 @@ const Dashboard: React.FC = () => {
   const userGroups = currentUser ? currentUser.Groups : [];
 
   const tasks = currentUser
-    ? userGroups.flatMap(g => g.Tasks.filter(t => t.Checked === 0)).slice(0, 3)
+    ? userGroups.flatMap(g => g.Tasks.filter(t => !(t instanceof Challenge) && !(t instanceof Event) && t.Checked === 0)).slice(0, 3)
+    : [];
+
+  const events = currentUser
+    ? userGroups.flatMap(g => g.Tasks.filter(t => t instanceof Event) as Event[]).slice(0, 3)
     : [];
 
   const toggleTask = (id: number) => {
@@ -44,7 +49,7 @@ const Dashboard: React.FC = () => {
                   <span className="group-avatar">🏠</span>
                   <div className="group-info">
                     <h3>{group.Name}</h3>
-                    <p>{group.Users.length} miembros • {group.Tasks.length} tareas</p>
+                    <p>{group.Users.length} miembros • {group.Tasks.length} items</p>
                   </div>
                   <span className="arrow-icon">➜</span>
                 </div>
@@ -54,28 +59,26 @@ const Dashboard: React.FC = () => {
         </section>
 
         <section className="dashboard-panel events-panel card">
-          <div className="panel-header"><h2>📅 Próximas Citas</h2></div>
+          <div className="panel-header"><h2>📅 Próximos Eventos</h2></div>
           <div className="events-mini-list">
-            <div className="event-item-mini">
-              <div className="event-date"><span>28</span><span>ABR</span></div>
-              <div className="event-details">
-                <h4>Limpieza General</h4>
-                <p>Piso 4</p>
+            {events.map(ev => (
+              <div key={ev.Id} className="event-item-mini">
+                <div className="event-date"><span>{ev.EndDate.getDate()}</span><span>{ev.EndDate.toLocaleString('es-ES', { month: 'short' }).toUpperCase()}</span></div>
+                <div className="event-details">
+                  <h4>{ev.Name}</h4>
+                  <p>{ev.Description}</p>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </section>
 
         <section className="dashboard-panel checklist-panel card">
-          <div className="panel-header"><h2>✅ Misiones Críticas</h2></div>
+          <div className="panel-header"><h2>📝 Tareas pendientes</h2></div>
           <div className="checklist-mini-list">
             {tasks.map(task => (
               <div key={task.Id} className={`check-item-mini ${task.Checked === 1 ? 'completed' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={task.Checked === 1}
-                  onChange={() => toggleTask(task.Id)}
-                />
+                <input type="checkbox" checked={task.Checked === 1} onChange={() => toggleTask(task.Id)} />
                 <span>{task.Name}</span>
               </div>
             ))}

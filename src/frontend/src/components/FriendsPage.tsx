@@ -1,17 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDataService } from '../../../services/DataContext';
+import { useDataService, useDataObserver } from '../../../services/DataContext';
 import './FriendsPage.css';
 
 const FriendsPage: React.FC = () => {
+  useDataObserver();
   const navigate = useNavigate();
   const dataService = useDataService();
   const currentUser = dataService.currentUser;
-  const friendsFromModel = currentUser ? [...currentUser.Friends] : [];
-  const [friendsList, setFriendsList] = useState(friendsFromModel);
+  const friendsList = currentUser ? currentUser.Friends : [];
 
   const handleRemove = (id: number) => {
-    setFriendsList(prev => prev.filter(f => f.Id !== id));
     dataService.removeFriend(id);
   };
 

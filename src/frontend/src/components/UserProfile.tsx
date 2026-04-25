@@ -1,9 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDataService } from '../../../services/DataContext';
+import { useDataService, useDataObserver } from '../../../services/DataContext';
+import { Event } from '../../../backend/event';
 import './UserProfile.css';
 
 const UserProfile: React.FC = () => {
+  useDataObserver();
   const navigate = useNavigate();
   const dataService = useDataService();
   const user = dataService.currentUser;
@@ -15,10 +17,15 @@ const UserProfile: React.FC = () => {
     joined: "Marzo 2024",
     bio: user.Description,
     stats: {
-      misionesCompletadas: user.Groups.flatMap(g => g.Tasks).filter(t => t.Checked === 1).length,
+      misionesCompletadas: user.Groups.flatMap(g => g.Tasks).filter(t => !(t instanceof Event) && t.Checked === 1).length,
       gremiosActivos: user.Groups.length,
       amigos: user.Friends.length
     }
+  };
+
+  const handleLogout = () => {
+    dataService.logout();
+    navigate('/auth');
   };
 
   return (
@@ -54,7 +61,7 @@ const UserProfile: React.FC = () => {
         </div>
         <div className="profile-actions-footer">
           <button className="btn btn-secondary">Cambiar Contraseña</button>
-          <button className="btn btn-danger">Cerrar Sesión</button>
+          <button className="btn btn-danger" onClick={handleLogout}>Cerrar Sesión</button>
         </div>
       </div>
     </div>

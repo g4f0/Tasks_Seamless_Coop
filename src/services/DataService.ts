@@ -3,8 +3,11 @@ import { Group } from "../backend/group";
 import { Task } from "../backend/task";
 import { Challenge } from "../backend/challenge";
 import { FriendRequest } from "../backend/friendRequest";
+import { Event } from "../backend/event";
 
 type Listener = () => void;
+
+type TaskType = "Task" | "Challenge" | "Event";
 
 type TaskDTO = {
   id: number;
@@ -14,7 +17,7 @@ type TaskDTO = {
   name: string;
   description: string;
   userIds: number[];
-  type: "Task" | "Challenge";
+  type: TaskType;
   winCondition?: string;
   loseCondition?: string;
   statA?: number;
@@ -91,7 +94,7 @@ export class DataService {
     const user3 = new User("Bruno", "pass123", "Caballero de la cocina.");
     const user4 = new User("Carlos", "pass123", "Explorador de gimnasios.");
     this.users = [user1, user2, user3, user4];
-    this.currentUser = user1;
+    this.currentUser = null;
 
     const grupo1 = new Group("Piso 4", "Gestión de tareas del hogar y gastos comunes.");
     const grupo2 = new Group("Viaje Verano", "Planificación del viaje a la costa en Agosto.");
@@ -109,13 +112,15 @@ export class DataService {
     const tarea1 = new Task(0, 2, "Comprar pan", "Comprar pan integral", new Date());
     const tarea2 = new Task(1, 1, "Limpiar cocina", "Dejar la cocina reluciente", new Date());
     const tarea3 = new Task(0, 3, "Pagar internet", "Pago mensual", new Date());
-    grupo1.Tasks.push(tarea1, tarea2, tarea3);
+    const evento = new Event(2, "Reunión de piso", "Organizar limpieza mensual", new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
+
+    grupo1.Tasks.push(tarea1, tarea2, tarea3, evento);
     tarea1.Users.push(user1);
     tarea2.Users.push(user2);
     tarea3.Users.push(user1);
+    evento.Users.push(user1, user2);
 
-    const reto = new Challenge(0, 2, "Pasos", "Caminar 10000 pasos", new Date(), "10000 pasos", "Menos de 2000", 0, 10000);
-    reto.StatA = 6000;
+    const reto = new Challenge(0, 2, "Pasos", "Caminar 10000 pasos", new Date(), "10000 pasos", "Menos de 2000", 6000, 10000);
     grupo1.Tasks.push(reto);
 
     user1.Friends.push(user2, user3);
@@ -125,7 +130,6 @@ export class DataService {
     const request1 = new FriendRequest(user4.Id, user1.Id);
     this.friendRequests = [request1];
   }
-
 
   exportSnapshot(): AppSnapshot {
     return {
@@ -144,6 +148,10 @@ export class DataService {
         description: g.Description,
         userIds: g.Users.map(u => u.Id),
         tasks: g.Tasks.map(t => {
+          let type: TaskType = "Task";
+          if (t instanceof Challenge) type = "Challenge";
+          else if (t instanceof Event) type = "Event";
+
           const base: TaskDTO = {
             id: t.Id,
             checked: t.Checked,
@@ -152,7 +160,7 @@ export class DataService {
             name: t.Name,
             description: t.Description,
             userIds: t.Users.map(u => u.Id),
-            type: t instanceof Challenge ? "Challenge" : "Task",
+            type,
           };
 
           if (t instanceof Challenge) {
@@ -188,7 +196,7 @@ export class DataService {
 
         const tasks: Task[] = g.tasks.map(t => {
           if (t.type === "Challenge") {
-            const ch = new Challenge(
+            return new Challenge(
               t.checked,
               t.priority,
               t.name,
@@ -199,7 +207,9 @@ export class DataService {
               t.statA ?? 0,
               t.statB ?? 0
             );
-            return ch;
+          }
+          if (t.type === "Event") {
+            return new Event(t.priority, t.name, t.description, new Date(t.endDate));
           }
           return new Task(t.checked, t.priority, t.name, t.description, new Date(t.endDate));
         });
@@ -241,6 +251,32 @@ export class DataService {
     }
   }
 
+  login(nameOrEmail: string, password: string): boolean {
+    const normalized = nameOrEmail.trim().toLowerCase();
+    const user = this.users.find(
+      u => u.Name.toLowerCase() === normalized || `${u.Name.toLowerCase()}@ejemplo.com` === normalized
+    );
+    if (!user || user.Password !== password) return false;
+    this.currentUser = user;
+    this.emit();
+    return true;
+  }
+
+  register(name: string, password: string): boolean {
+    const normalized = name.trim().toLowerCase();
+    if (!name.trim() || !password.trim()) return false;
+    if (this.users.some(u => u.Name.toLowerCase() === normalized)) return false;
+    const user = new User(name.trim(), password, "Nuevo aventurero.");
+    this.users.push(user);
+    this.currentUser = user;
+    this.emit();
+    return true;
+  }
+
+  logout() {
+    this.currentUser = null;
+    this.emit();
+  }
 
   addGroup(group: Group) {
     this.groups.push(group);
@@ -248,12 +284,63 @@ export class DataService {
     this.emit();
   }
 
+  addTaskToGroup(groupId: number, payload: { name: string; description: string; priority: number; endDate: Date }) {
+    const group = this.groups.find(g => g.Id === groupId);
+    if (!group) return;
+    const task = new Task(0, payload.priority, payload.name, payload.description, payload.endDate);
+    if (this.currentUser) task.Users.push(this.currentUser);
+    group.Tasks.push(task);
+    this.emit();
+  }
+
+  addEventToGroup(groupId: number, payload: { name: string; description: string; priority: number; endDate: Date }) {
+    const group = this.groups.find(g => g.Id === groupId);
+    if (!group) return;
+    const ev = new Event(payload.priority, payload.name, payload.description, payload.endDate);
+    if (this.currentUser) ev.Users.push(this.currentUser);
+    group.Tasks.push(ev);
+    this.emit();
+  }
+
+  addChallengeToGroup(
+    groupId: number,
+    payload: {
+      name: string;
+      description: string;
+      priority: number;
+      endDate: Date;
+      winCondition: string;
+      loseCondition: string;
+      statA: number;
+      statB: number;
+    }
+  ) {
+    const group = this.groups.find(g => g.Id === groupId);
+    if (!group) return;
+    const ch = new Challenge(
+      0,
+      payload.priority,
+      payload.name,
+      payload.description,
+      payload.endDate,
+      payload.winCondition,
+      payload.loseCondition,
+      payload.statA,
+      payload.statB
+    );
+    if (this.currentUser) ch.Users.push(this.currentUser);
+    group.Tasks.push(ch);
+    this.emit();
+  }
+
   toggleTask(taskId: number, groupId?: number) {
     const tasks = groupId
       ? this.groups.find(g => g.Id === groupId)?.Tasks ?? []
       : this.groups.flatMap(g => g.Tasks);
+
     tasks.forEach(t => {
       if (t.Id === taskId) {
+        if (t instanceof Event) return; // Evento no checkeable manualmente
         t.Checked = t.Checked === 1 ? 0 : 1;
       }
     });
@@ -262,17 +349,37 @@ export class DataService {
 
   removeFriend(userId: number) {
     if (!this.currentUser) return;
-    const friends = this.currentUser.Friends;
-    const updated = friends.filter(f => f.Id !== userId);
-    friends.length = 0;
-    updated.forEach(f => friends.push(f));
+    const me = this.currentUser;
+    const other = this.users.find(u => u.Id === userId);
+
+    me.Friends = me.Friends.filter(f => f.Id !== userId);
+    if (other) other.Friends = other.Friends.filter(f => f.Id !== me.Id);
+
     this.emit();
   }
 
-  sendFriendRequest(targetUser: User) {
-    if (!this.currentUser) return;
+  sendFriendRequest(targetUser: User): { ok: boolean; message: string } {
+    if (!this.currentUser) return { ok: false, message: "Debes iniciar sesión." };
+    if (targetUser.Id === this.currentUser.Id) return { ok: false, message: "No puedes añadirte a ti mismo." };
+    if (this.currentUser.Friends.some(f => f.Id === targetUser.Id)) {
+      return { ok: false, message: "Ya sois amigos." };
+    }
+
+    const duplicate = this.friendRequests.some(
+      r =>
+        (r.IdUserSrc === this.currentUser!.Id && r.IdUserDest === targetUser.Id) ||
+        (r.IdUserSrc === targetUser.Id && r.IdUserDest === this.currentUser!.Id)
+    );
+    if (duplicate) return { ok: false, message: "Ya existe una solicitud pendiente." };
+
     const req = new FriendRequest(this.currentUser.Id, targetUser.Id);
     this.friendRequests.push(req);
+    this.emit();
+    return { ok: true, message: "Solicitud enviada." };
+  }
+
+  rejectFriendRequest(reqId: number) {
+    this.friendRequests = this.friendRequests.filter(r => r.Id !== reqId);
     this.emit();
   }
 
