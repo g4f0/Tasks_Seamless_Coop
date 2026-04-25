@@ -1,6 +1,6 @@
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { DataService } from './DataService';
-import * as p2p from '../p2p/p2p';
+import * as p2p from '../p2p/p2p.browser';
 
 interface DataContextValue {
   dataService: DataService;
