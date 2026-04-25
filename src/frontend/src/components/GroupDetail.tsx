@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDataService, useDataObserver } from '../../../services/DataContext';
 import { Challenge } from '../../../backend/challenge';
 import { Event } from '../../../backend/event';
+import { createGroupSession, getGroupStatus, joinGroupSession, onGroupSnapshot, publishGroupSnapshot } from '../services/p2pClient';
 import './GroupDetail.css';
 
 type CreateType = "Task" | "Event" | "Challenge";
@@ -12,6 +13,7 @@ const GroupDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const dataService = useDataService();
   const group = dataService.groups.find(g => g.Id === Number(id));
+  const groupId = String(id ?? "");
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [inputAmounts, setInputAmounts] = useState<Record<number, number>>({});
@@ -24,6 +26,11 @@ const GroupDetail: React.FC = () => {
   const [winCondition, setWinCondition] = useState("");
   const [loseCondition, setLoseCondition] = useState("");
   const [statB, setStatB] = useState(100);
+
+  const [joinCode, setJoinCode] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [p2pConnected, setP2pConnected] = useState(false);
+  const [p2pMsg, setP2pMsg] = useState("");
 
   if (!group) return <div>Gremio no encontrado</div>;
 
@@ -39,6 +46,64 @@ const GroupDetail: React.FC = () => {
     () => group.Tasks.filter(t => t instanceof Challenge) as Challenge[],
     [group.Tasks]
   );
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchStatus = async () => {
+      try {
+        const st = await getGroupStatus(groupId);
+        if (!mounted) return;
+        setP2pConnected(!!st.connected);
+        if (st.inviteCode) setInviteCode(st.inviteCode);
+      } catch {
+        if (!mounted) return;
+        setP2pConnected(false);
+      }
+    };
+
+    fetchStatus();
+    const timer = setInterval(fetchStatus, 3000);
+
+    const unsubWs = onGroupSnapshot((gid, snapshot) => {
+      if (gid !== groupId) return;
+      dataService.replaceStateFromSnapshot(snapshot);
+    });
+
+    const unsubData = dataService.subscribe(async () => {
+      if (!p2pConnected || dataService.isApplyingRemoteUpdate) return;
+      const snap = dataService.exportSnapshot();
+      await publishGroupSnapshot(groupId, snap);
+    });
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      unsubWs();
+      unsubData();
+    };
+  }, [groupId, dataService, p2pConnected]);
+
+  const handleCreateSession = async () => {
+    try {
+      const r = await createGroupSession(groupId);
+      setInviteCode(r.inviteCode ?? "");
+      setP2pConnected(true);
+      setP2pMsg("Sesión P2P del grupo creada.");
+      await publishGroupSnapshot(groupId, dataService.exportSnapshot());
+    } catch (e: any) {
+      setP2pMsg(e.message);
+    }
+  };
+
+  const handleJoinSession = async () => {
+    try {
+      await joinGroupSession(groupId, joinCode.trim());
+      setP2pConnected(true);
+      setP2pMsg("Conectado al grupo P2P.");
+    } catch (e: any) {
+      setP2pMsg(e.message);
+    }
+  };
 
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -76,14 +141,8 @@ const GroupDetail: React.FC = () => {
       dataService.addEventToGroup(group.Id, { name, description, priority, endDate: date });
     } else {
       dataService.addChallengeToGroup(group.Id, {
-        name,
-        description,
-        priority,
-        endDate: date,
-        winCondition,
-        loseCondition,
-        statA: 0,
-        statB
+        name, description, priority, endDate: date,
+        winCondition, loseCondition, statA: 0, statB
       });
     }
 
@@ -100,6 +159,22 @@ const GroupDetail: React.FC = () => {
     <div className="group-detail">
       <div className="header-detail">
         <h2>🏠 {group.Name}</h2>
+      </div>
+
+      <div className="card side-card" style={{ marginBottom: 12 }}>
+        <h3>🔗 Sincronización P2P del grupo</h3>
+        <p>Estado: <strong>{p2pConnected ? "Conectado" : "Desconectado"}</strong></p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={handleCreateSession}>Crear sesión de este grupo</button>
+          <input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="Código de invitación"
+          />
+          <button onClick={handleJoinSession}>Unirme con código</button>
+        </div>
+        {inviteCode && <p>Invite code: <code>{inviteCode}</code></p>}
+        {p2pMsg && <p>{p2pMsg}</p>}
       </div>
 
       <div className="group-main-layout">
@@ -139,7 +214,7 @@ const GroupDetail: React.FC = () => {
               </select>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" required />
               <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descripción" required />
-              <input type="number" min={1} max={3} value={priority} onChange={(e) => setPriority(Number(e.target.value))} placeholder="Prioridad" />
+              <input type="number" min={1} max={3} value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
 
               {createType === "Challenge" && (

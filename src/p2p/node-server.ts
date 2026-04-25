@@ -1,132 +1,181 @@
 import express from "express";
+import cors from "cors";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import cors from "cors";
 
 // @ts-ignore
 import Autopass from "autopass";
 // @ts-ignore
 import Corestore from "corestore";
 
-const PORT = Number(process.env.P2P_PORT ?? 4312);
-const SNAPSHOT_KEY = "state:snapshot";
-
-let atpass: any | null = null;
-let crstore: any | null = null;
-let connected = false;
-let inviteCode: string | null = null;
-let latestSnapshot: any = null;
+type GroupState = {
+  corestore: any | null;
+  autopass: any | null;
+  connected: boolean;
+  inviteCode: string | null;
+  latestSnapshot: unknown | null;
+};
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const httpServer = createServer(app);
-const wss = new WebSocketServer({ server: httpServer });
+const server = createServer(app);
+const wss = new WebSocketServer({ server });
 
-function broadcast(obj: unknown) {
-  const data = JSON.stringify(obj);
-  wss.clients.forEach((client: any) => {
-    if (client.readyState === 1) client.send(data);
+const HOST = process.env.P2P_HOST ?? "0.0.0.0";
+const PORT = Number(process.env.P2P_PORT ?? 4312);
+const BASE_STORE = process.env.P2P_STORE_BASE ?? "./.p2p-store";
+
+const groups = new Map<string, GroupState>();
+
+function snapshotKey(groupId: string) {
+  return `group:${groupId}:snapshot`;
+}
+function storePath(groupId: string) {
+  return `${BASE_STORE}/${groupId}`;
+}
+function ensureGroup(groupId: string): GroupState {
+  if (!groups.has(groupId)) {
+    groups.set(groupId, {
+      corestore: null,
+      autopass: null,
+      connected: false,
+      inviteCode: null,
+      latestSnapshot: null,
+    });
+  }
+  return groups.get(groupId)!;
+}
+function broadcastGroup(groupId: string, payload: unknown) {
+  const msg = JSON.stringify({ type: "group-snapshot", groupId, payload });
+  wss.clients.forEach((c: any) => {
+    if (c.readyState === 1) c.send(msg);
   });
 }
 
-async function consumeLatestSnapshotIfAny() {
-  if (!atpass) return;
+async function consumeLatest(groupId: string) {
+  const st = ensureGroup(groupId);
+  if (!st.autopass) return;
   let latestRaw: string | null = null;
-  for await (const { key, value } of atpass.list()) {
-    if (key === SNAPSHOT_KEY) latestRaw = value.toString();
+  for await (const { key, value } of st.autopass.list()) {
+    if (key === snapshotKey(groupId)) latestRaw = value.toString();
   }
   if (!latestRaw) return;
   try {
-    latestSnapshot = JSON.parse(latestRaw);
-    broadcast({ type: "snapshot", payload: latestSnapshot });
+    st.latestSnapshot = JSON.parse(latestRaw);
+    broadcastGroup(groupId, st.latestSnapshot);
   } catch (e) {
-    console.error("snapshot parse error", e);
+    console.error(`[${groupId}] snapshot parse error`, e);
   }
 }
 
-async function startCreator(storagePath = "./.p2p-store") {
-  if (connected) return;
-  crstore = new Corestore(storagePath);
-  atpass = new Autopass(crstore);
-  await atpass.ready();
+async function createGroupSession(groupId: string) {
+  const st = ensureGroup(groupId);
+  if (st.connected) return st;
 
-  atpass.on("update", async () => {
-    await consumeLatestSnapshotIfAny();
+  st.corestore = new Corestore(storePath(groupId));
+  st.autopass = new Autopass(st.corestore);
+  await st.autopass.ready();
+
+  st.autopass.on("update", async () => {
+    await consumeLatest(groupId);
   });
 
-  inviteCode = await atpass.createInvite();
-  connected = true;
+  st.inviteCode = await st.autopass.createInvite();
+  st.connected = true;
+  return st;
 }
 
-async function joinByInvite(code: string, storagePath = "./.p2p-store") {
-  if (connected) return;
-  crstore = new Corestore(storagePath);
-  const pair = Autopass.pair(crstore, code);
-  atpass = await pair.finished();
-  await atpass.ready();
+async function joinGroupSession(groupId: string, inviteCode: string) {
+  const st = ensureGroup(groupId);
+  if (st.connected) return st;
 
-  atpass.on("update", async () => {
-    await consumeLatestSnapshotIfAny();
+  st.corestore = new Corestore(storePath(groupId));
+  const pair = Autopass.pair(st.corestore, inviteCode);
+  st.autopass = await pair.finished();
+  await st.autopass.ready();
+
+  st.autopass.on("update", async () => {
+    await consumeLatest(groupId);
   });
 
-  connected = true;
-  inviteCode = code;
-  await consumeLatestSnapshotIfAny();
+  st.connected = true;
+  st.inviteCode = inviteCode;
+  await consumeLatest(groupId);
+  return st;
 }
 
-app.get("/health", (_, res) => {
-  res.json({ ok: true, connected, inviteCode });
+app.get("/health", (_req, res) => {
+  const summary = Array.from(groups.entries()).map(([groupId, st]) => ({
+    groupId,
+    connected: st.connected,
+    inviteCode: st.inviteCode,
+    hasSnapshot: !!st.latestSnapshot,
+  }));
+  res.json({ ok: true, groups: summary });
 });
 
-app.post("/p2p/create", async (req, res) => {
+app.get("/p2p/group/status", (req, res) => {
+  const groupId = String(req.query.groupId ?? "");
+  if (!groupId) return res.status(400).json({ ok: false, error: "groupId required" });
+  const st = ensureGroup(groupId);
+  res.json({ ok: true, connected: st.connected, inviteCode: st.inviteCode });
+});
+
+app.post("/p2p/group/create", async (req, res) => {
   try {
-    await startCreator(req.body?.storagePath);
-    res.json({ ok: true, inviteCode });
+    const groupId = String(req.body?.groupId ?? "");
+    if (!groupId) return res.status(400).json({ ok: false, error: "groupId required" });
+    const st = await createGroupSession(groupId);
+    res.json({ ok: true, inviteCode: st.inviteCode });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "error" });
+    res.status(500).json({ ok: false, error: e?.message ?? "create error" });
   }
 });
 
-app.post("/p2p/join", async (req, res) => {
+app.post("/p2p/group/join", async (req, res) => {
   try {
-    const code = req.body?.inviteCode;
-    if (!code) return res.status(400).json({ ok: false, error: "inviteCode required" });
-    await joinByInvite(code, req.body?.storagePath);
+    const groupId = String(req.body?.groupId ?? "");
+    const inviteCode = String(req.body?.inviteCode ?? "");
+    if (!groupId || !inviteCode) return res.status(400).json({ ok: false, error: "groupId + inviteCode required" });
+    await joinGroupSession(groupId, inviteCode);
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "error" });
+    res.status(500).json({ ok: false, error: e?.message ?? "join error" });
   }
 });
 
-app.post("/p2p/publish", async (req, res) => {
+app.post("/p2p/group/publish", async (req, res) => {
   try {
-    if (!atpass) return res.status(400).json({ ok: false, error: "not connected" });
+    const groupId = String(req.body?.groupId ?? "");
     const snapshot = req.body?.snapshot;
-    if (!snapshot) return res.status(400).json({ ok: false, error: "snapshot required" });
+    if (!groupId || !snapshot) return res.status(400).json({ ok: false, error: "groupId + snapshot required" });
 
-    latestSnapshot = snapshot;
-    await atpass.add(SNAPSHOT_KEY, JSON.stringify(snapshot));
-    broadcast({ type: "snapshot", payload: latestSnapshot });
+    const st = ensureGroup(groupId);
+    if (!st.connected || !st.autopass) return res.status(400).json({ ok: false, error: "group not connected" });
+
+    st.latestSnapshot = snapshot;
+    await st.autopass.add(snapshotKey(groupId), JSON.stringify(snapshot));
+    broadcastGroup(groupId, st.latestSnapshot);
 
     res.json({ ok: true });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "error" });
+    res.status(500).json({ ok: false, error: e?.message ?? "publish error" });
   }
 });
 
-app.get("/p2p/latest", (_, res) => {
-  res.json({ ok: true, snapshot: latestSnapshot });
+app.get("/p2p/group/latest", (req, res) => {
+  const groupId = String(req.query.groupId ?? "");
+  if (!groupId) return res.status(400).json({ ok: false, error: "groupId required" });
+  const st = ensureGroup(groupId);
+  res.json({ ok: true, snapshot: st.latestSnapshot });
 });
 
 wss.on("connection", (ws) => {
-  ws.send(JSON.stringify({ type: "status", payload: { connected, inviteCode } }));
-  if (latestSnapshot) {
-    ws.send(JSON.stringify({ type: "snapshot", payload: latestSnapshot }));
-  }
+  ws.send(JSON.stringify({ type: "status", ok: true }));
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`P2P node bridge running on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`P2P bridge running on http://${HOST}:${PORT}`);
 });
