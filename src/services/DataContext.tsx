@@ -12,8 +12,8 @@ const dataService = DataService.getInstance();
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   useEffect(() => {
-    p2p.connect(dataService);
-    return () => p2p.disconnect();
+    p2p.connect(dataService).catch(console.error);
+    return () => { p2p.disconnect().catch(console.error); };
   }, []);
 
   return (

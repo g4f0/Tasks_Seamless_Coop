@@ -6,6 +6,52 @@ import { FriendRequest } from "../backend/friendRequest";
 
 type Listener = () => void;
 
+type TaskDTO = {
+  id: number;
+  checked: number;
+  priority: number;
+  endDate: string;
+  name: string;
+  description: string;
+  userIds: number[];
+  type: "Task" | "Challenge";
+  winCondition?: string;
+  loseCondition?: string;
+  statA?: number;
+  statB?: number;
+};
+
+type GroupDTO = {
+  id: number;
+  name: string;
+  description: string;
+  userIds: number[];
+  tasks: TaskDTO[];
+};
+
+type UserDTO = {
+  id: number;
+  name: string;
+  password: string;
+  description: string;
+  friendIds: number[];
+  groupIds: number[];
+};
+
+type FriendRequestDTO = {
+  id: number;
+  idUserSrc: number;
+  idUserDest: number;
+  accepted: boolean;
+};
+
+export interface AppSnapshot {
+  currentUserId: number | null;
+  users: UserDTO[];
+  groups: GroupDTO[];
+  friendRequests: FriendRequestDTO[];
+}
+
 export class DataService {
   private static instance: DataService;
   private listeners: Listener[] = [];
@@ -14,6 +60,8 @@ export class DataService {
   users: User[] = [];
   groups: Group[] = [];
   friendRequests: FriendRequest[] = [];
+
+  public isApplyingRemoteUpdate = false;
 
   private constructor() {
     this.seedData();
@@ -26,7 +74,6 @@ export class DataService {
     return DataService.instance;
   }
 
-  // Suscripción a cambios (pública)
   subscribe(listener: Listener) {
     this.listeners.push(listener);
     return () => {
@@ -34,7 +81,6 @@ export class DataService {
     };
   }
 
-  // Emitir cambios para forzar actualizaciones (ahora pública para P2P)
   emit = () => {
     this.listeners.forEach(l => l());
   };
@@ -79,6 +125,122 @@ export class DataService {
     const request1 = new FriendRequest(user4.Id, user1.Id);
     this.friendRequests = [request1];
   }
+
+
+  exportSnapshot(): AppSnapshot {
+    return {
+      currentUserId: this.currentUser?.Id ?? null,
+      users: this.users.map(u => ({
+        id: u.Id,
+        name: u.Name,
+        password: u.Password,
+        description: u.Description,
+        friendIds: u.Friends.map(f => f.Id),
+        groupIds: u.Groups.map(g => g.Id),
+      })),
+      groups: this.groups.map(g => ({
+        id: g.Id,
+        name: g.Name,
+        description: g.Description,
+        userIds: g.Users.map(u => u.Id),
+        tasks: g.Tasks.map(t => {
+          const base: TaskDTO = {
+            id: t.Id,
+            checked: t.Checked,
+            priority: t.Priority,
+            endDate: t.EndDate.toISOString(),
+            name: t.Name,
+            description: t.Description,
+            userIds: t.Users.map(u => u.Id),
+            type: t instanceof Challenge ? "Challenge" : "Task",
+          };
+
+          if (t instanceof Challenge) {
+            base.winCondition = t.WinCondition;
+            base.loseCondition = t.LoseCondition;
+            base.statA = t.StatA;
+            base.statB = t.StatB;
+          }
+          return base;
+        }),
+      })),
+      friendRequests: this.friendRequests.map(r => ({
+        id: r.Id,
+        idUserSrc: r.IdUserSrc,
+        idUserDest: r.IdUserDest,
+        accepted: r.Accepted,
+      })),
+    };
+  }
+
+  replaceStateFromSnapshot(snapshot: AppSnapshot) {
+    this.isApplyingRemoteUpdate = true;
+    try {
+      const userMap = new Map<number, User>();
+      for (const u of snapshot.users) {
+        const user = new User(u.name, u.password, u.description);
+        userMap.set(u.id, user);
+      }
+
+      const groupMap = new Map<number, Group>();
+      for (const g of snapshot.groups) {
+        const group = new Group(g.name, g.description);
+
+        const tasks: Task[] = g.tasks.map(t => {
+          if (t.type === "Challenge") {
+            const ch = new Challenge(
+              t.checked,
+              t.priority,
+              t.name,
+              t.description,
+              new Date(t.endDate),
+              t.winCondition ?? "",
+              t.loseCondition ?? "",
+              t.statA ?? 0,
+              t.statB ?? 0
+            );
+            return ch;
+          }
+          return new Task(t.checked, t.priority, t.name, t.description, new Date(t.endDate));
+        });
+
+        group.Tasks = tasks;
+        groupMap.set(g.id, group);
+      }
+
+      snapshot.groups.forEach(g => {
+        const group = groupMap.get(g.id)!;
+        group.Users = g.userIds.map(uid => userMap.get(uid)!).filter(Boolean);
+
+        g.tasks.forEach((taskDTO, index) => {
+          const task = group.Tasks[index];
+          task.Users = taskDTO.userIds.map(uid => userMap.get(uid)!).filter(Boolean);
+        });
+      });
+
+      snapshot.users.forEach(u => {
+        const user = userMap.get(u.id)!;
+        user.Friends = u.friendIds.map(fid => userMap.get(fid)!).filter(Boolean);
+        user.Groups = u.groupIds.map(gid => groupMap.get(gid)!).filter(Boolean);
+      });
+
+      const requests = snapshot.friendRequests.map(r => {
+        const fr = new FriendRequest(r.idUserSrc, r.idUserDest);
+        fr.Accepted = r.accepted;
+        return fr;
+      });
+
+      this.users = Array.from(userMap.values());
+      this.groups = Array.from(groupMap.values());
+      this.friendRequests = requests;
+      this.currentUser = snapshot.currentUserId !== null ? (userMap.get(snapshot.currentUserId) ?? null) : null;
+
+      this.emit();
+    } finally {
+      this.isApplyingRemoteUpdate = false;
+    }
+  }
+
 
   addGroup(group: Group) {
     this.groups.push(group);
