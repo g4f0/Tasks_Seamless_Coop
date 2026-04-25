@@ -16,6 +16,16 @@ class Challenge extends Task {
         this.statA = statA;
         this.statB = statB;
     }
-    
 
+    public get WinCondition(): string { return this.winCondition; }
+    public set WinCondition(value: string) { this.winCondition = value; }
+
+    public get LoseCondition(): string { return this.loseCondition; }
+    public set LoseCondition(value: string) { this.loseCondition = value; }
+
+    public get StatA(): number { return this.statA; }
+    public set StatA(value: number) { this.statA = value; }
+
+    public get StatB(): number { return this.statB; }
+    public set StatB(value: number) { this.statB = value; }
 }

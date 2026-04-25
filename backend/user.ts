@@ -12,7 +12,6 @@ export class User {
     private description: string;
 
     public constructor(name: string, password: string, description: string) {
-
         this.name = name;
         this.password = password;
         this.id = User.nextId++;
@@ -21,4 +20,25 @@ export class User {
         this.groups = [];
         this.requests = [];
     }
-};
+
+    public get Id(): number { return this.id; }
+    public set Id(value: number) { this.id = value; }
+
+    public get Name(): string { return this.name; }
+    public set Name(value: string) { this.name = value; }
+
+    public get Password(): string { return this.password; }
+    public set Password(value: string) { this.password = value; }
+
+    public get Friends(): User[] { return this.friends; }
+    public set Friends(value: User[]) { this.friends = value; }
+
+    public get Groups(): Group[] { return this.groups; }
+    public set Groups(value: Group[]) { this.groups = value; }
+
+    public get Requests(): FriendRequest[] { return this.requests; }
+    public set Requests(value: FriendRequest[]) { this.requests = value; }
+
+    public get Description(): string { return this.description; }
+    public set Description(value: string) { this.description = value; }
+}

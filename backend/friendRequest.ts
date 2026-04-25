@@ -11,4 +11,16 @@ export class FriendRequest {
         this.idUserDest = idUserDest;
         this.accepted = false;
     }
+
+    public get Id(): number { return this.id; }
+    public set Id(value: number) { this.id = value; }
+
+    public get IdUserSrc(): number { return this.idUserSrc; }
+    public set IdUserSrc(value: number) { this.idUserSrc = value; }
+
+    public get IdUserDest(): number { return this.idUserDest; }
+    public set IdUserDest(value: number) { this.idUserDest = value; }
+
+    public get Accepted(): boolean { return this.accepted; }
+    public set Accepted(value: boolean) { this.accepted = value; }
 }
