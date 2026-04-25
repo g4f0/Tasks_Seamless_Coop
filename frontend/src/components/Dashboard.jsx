@@ -1,47 +1,86 @@
 import React from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import './Dashboard.css'
 
 export default function Dashboard() {
+  const navigate = useNavigate() // Hook para navegar
+
+  const groups = [
+    { id: 1, name: '🏠 Piso 4', members: 4, tasks: 5 },
+    { id: 2, name: '✈️ Viaje Verano', members: 8, tasks: 12 }
+  ]
+
   return (
-    <div className="dashboard">
-      <h2>Bienvenido! 👋</h2>
-      
-      <div className="dashboard-grid">
-        <div className="card">
-          <h3>🎯 Mis Grupos</h3>
-          <ul>
-            <li>🏠 Piso 4</li>
-            <li>✈️ Viaje Verano</li>
-            <li>💪 Gym Friends</li>
-          </ul>
-          <button className="btn">+ Crear grupo</button>
+    <div className="dashboard-hero">
+      <header className="welcome-banner">
+        <div className="welcome-text">
+          <h1>¡Saludos, Aventurero! ⚔️</h1>
+          <p>Gestiona tus gremios y completa tus misiones diarias.</p>
         </div>
+        {/* BOTÓN CONECTADO */}
+        <button 
+          className="btn-create-massive" 
+          onClick={() => navigate('/crear-gremio')}
+        >
+          + CREAR NUEVO GREMIO
+        </button>
+      </header>
 
-        <div className="card">
-          <h3>📅 Próximos (3)</h3>
-          <ul>
-            <li>• Cena Grupo</li>
-            <li>• Reto Pasos</li>
-            <li>• Comprar leche</li>
-          </ul>
-          <a href="/grupos" className="btn">Ver todos</a>
-        </div>
+      <main className="dashboard-grid-layout">
+        <section className="dashboard-panel groups-panel card">
+          <div className="panel-header">
+            <h2>🛡️ Mis Gremios</h2>
+            <Link to="/grupos" className="view-all">Ver todos</Link>
+          </div>
+          <div className="groups-list-compact">
+            {groups.map(group => (
+              <Link key={group.id} to={`/grupos/${group.id}`} className="group-item-link">
+                <div className="group-item">
+                  <span className="group-avatar">{group.name.split(' ')[0]}</span>
+                  <div className="group-info">
+                    <h3>{group.name.split(' ').slice(1).join(' ')}</h3>
+                    <p>{group.members} miembros • {group.tasks} tareas</p>
+                  </div>
+                  <span className="arrow-icon">➜</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
 
-        <div className="card">
-          <h3>🏆 Mis Retos (2)</h3>
-          <p>• Pasos (30.5%)</p>
-          <p>• Gym (40%)</p>
-          <button className="btn">+ Crear reto</button>
-        </div>
+        <section className="dashboard-panel events-panel card">
+          <div className="panel-header"><h2>📅 Próximas Citas</h2></div>
+          <div className="events-mini-list">
+            <div className="event-item-mini">
+              <div className="event-date"><span>28</span><span>ABR</span></div>
+              <div className="event-details">
+                <h4>Limpieza General</h4>
+                <p>Piso 4</p>
+              </div>
+            </div>
+          </div>
+        </section>
 
-        <div className="card">
-          <h3>✅ Mis Checklists</h3>
-          <p>Activos: 3</p>
-          <p>• Compras (20%)</p>
-          <p>• Limpiar (60%)</p>
-          <button className="btn">+ Crear check</button>
-        </div>
-      </div>
+        <section className="dashboard-panel checklist-panel card">
+          <div className="panel-header"><h2>✅ Misiones Críticas</h2></div>
+          <div className="checklist-mini-list">
+            <div className="check-item-mini">
+              <input type="checkbox" readOnly />
+              <span>Comprar suministros</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="dashboard-panel challenges-panel card">
+          <div className="panel-header"><h2>🏆 Retos Activos</h2></div>
+          <div className="challenges-mini-list">
+            <div className="challenge-mini">
+              <div className="ch-mini-info"><span>🏃 Pasos Totales</span><span>75%</span></div>
+              <div className="progress-bar-mini"><div className="progress-fill" style={{width: '75%'}}></div></div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   )
 }

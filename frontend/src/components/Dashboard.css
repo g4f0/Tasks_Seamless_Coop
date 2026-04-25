@@ -1,45 +1,101 @@
-.dashboard {
-  padding: 2rem 0;
+.dashboard-hero {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.dashboard h2 {
-  font-size: 2rem;
-  margin-bottom: 2rem;
-  color: var(--primary);
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-}
-
-.dashboard .card {
+/* BANNER */
+.welcome-banner {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 2.5rem 3rem;
+  border-radius: 20px;
+  border: 3px solid var(--primary);
+  box-shadow: 8px 8px 0px var(--gold);
+  margin-bottom: 3rem;
 }
 
-.dashboard .card h3 {
-  font-size: 1.3rem;
-  border-bottom: 2px solid var(--gold);
+.welcome-text h1 { font-size: 2.5rem; color: var(--primary); margin: 0; }
+
+.btn-create-massive {
+  background: var(--primary);
+  color: var(--gold);
+  border: 2px solid var(--gold);
+  padding: 1rem 2rem;
+  font-weight: 900;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+/* LAYOUT DE PANELES */
+.dashboard-grid-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.dashboard-panel {
+  padding: 1.5rem !important;
+  border: 2px solid var(--primary) !important;
+}
+
+.groups-panel {
+  grid-row: span 3;
+  min-height: 500px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.2rem;
+  border-bottom: 2px solid var(--bg);
   padding-bottom: 0.5rem;
 }
 
-.dashboard .card ul {
-  list-style: none;
-}
+.panel-header h2 { font-size: 1.3rem; color: var(--primary); margin: 0; }
+.view-all { color: var(--gold); font-weight: bold; text-decoration: none; font-size: 0.9rem; }
 
-.dashboard .card li {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #ddd;
+/* ESTILOS GRUPOS (Limpio) */
+.group-item-link { text-decoration: none; color: inherit; }
+.group-item {
+  display: flex;
+  align-items: center;
+  padding: 1.2rem;
+  background: var(--bg);
+  border-radius: 12px;
+  transition: 0.2s;
+  margin-bottom: 1rem;
+  border: 1px solid transparent;
 }
+.group-item:hover { transform: translateX(10px); border-color: var(--gold); background: white; }
+.group-avatar { font-size: 2rem; margin-right: 1.5rem; }
+.group-info h3 { margin: 0; color: var(--primary); font-size: 1.1rem; }
+.group-info p { margin: 2px 0 0; font-size: 0.85rem; color: #666; }
+.arrow-icon { margin-left: auto; color: var(--gold); font-weight: bold; }
 
-.dashboard .card p {
-  padding: 0.25rem 0;
+/* EVENTOS, CHECKLIST Y RETOS */
+.event-item-mini { display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center; }
+.event-date {
+  background: var(--primary);
+  color: white;
+  padding: 5px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 50px;
 }
+.checklist-mini-list { display: flex; flex-direction: column; gap: 10px; }
+.strikethrough { text-decoration: line-through; color: #888; }
+.progress-bar-mini { background: #eee; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 5px; }
+.progress-fill { background: var(--primary); height: 100%; }
 
-.dashboard .btn {
-  margin-top: auto;
-  align-self: flex-start;
+@media (max-width: 1000px) {
+  .dashboard-grid-layout { grid-template-columns: 1fr; }
+  .groups-panel { grid-row: span 1; min-height: auto; }
 }

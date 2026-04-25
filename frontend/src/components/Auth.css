@@ -1,0 +1,85 @@
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+  padding: 2rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 0 !important; /* Quitamos el padding general para las pestañas */
+  overflow: hidden;
+  border: 2px solid var(--primary) !important;
+  box-shadow: 8px 8px 0px var(--gold) !important;
+  background: white;
+}
+
+.auth-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--primary);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 1rem;
+  border: none;
+  background: var(--bg);
+  cursor: pointer;
+  font-weight: bold;
+  color: #888;
+  transition: 0.3s;
+}
+
+.tab-btn.active {
+  background: white;
+  color: var(--primary);
+  border-bottom: 3px solid var(--gold);
+}
+
+.auth-header {
+  padding: 2rem 2rem 1rem 2rem;
+  text-align: center;
+}
+
+.auth-header h2 {
+  color: var(--primary);
+  margin-bottom: 5px;
+}
+
+.auth-header p {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.auth-form {
+  padding: 0 2rem 2rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.btn-auth-submit {
+  background: var(--primary);
+  color: var(--gold);
+  border: 2px solid var(--gold);
+  padding: 1rem;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 1rem;
+  letter-spacing: 1px;
+}
+
+.btn-auth-submit:hover {
+  background: var(--gold);
+  color: var(--primary);
+}
+
+.auth-footer {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #999;
+  padding-bottom: 1.5rem;
+}

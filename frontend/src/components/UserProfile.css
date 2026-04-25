@@ -1,0 +1,118 @@
+.profile-page-container {
+  padding: 2rem;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+}
+
+.profile-card {
+  padding: 2.5rem !important;
+  border: 2px solid var(--primary) !important;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.profile-main-info {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 2rem;
+}
+
+.avatar-placeholder {
+  font-size: 3.5rem;
+  background: var(--bg);
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 2px solid var(--gold);
+}
+
+.user-details h1 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1.8rem;
+}
+
+.user-email { color: #666; margin: 5px 0; }
+.user-since { font-size: 0.85rem; color: #999; }
+
+.btn-edit-profile {
+  margin-left: auto;
+  font-size: 0.8rem;
+}
+
+.profile-content-section h3 {
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.bio-description {
+  color: #555;
+  line-height: 1.5;
+}
+
+/* GRID DE ESTADÍSTICAS */
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--bg);
+  padding: 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-num {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--primary);
+}
+
+.stat-name {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #777;
+  margin-top: 5px;
+}
+
+/* FOOTER */
+.profile-actions-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 1rem;
+}
+
+.btn-danger {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c0392b;
+}
+
+@media (max-width: 600px) {
+  .profile-main-info { flex-direction: column; text-align: center; }
+  .btn-edit-profile { margin: 10px 0 0 0; }
+  .profile-stats-grid { grid-template-columns: 1fr; gap: 15px; }
+}

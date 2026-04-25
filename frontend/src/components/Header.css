@@ -1,27 +1,140 @@
-.header {
-  background-color: var(--primary);
-  color: var(--bg);
-  padding: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border-bottom: 3px solid var(--gold);
-}
-
-.header-content {
-  max-width: 1200px;
-  margin: 0 auto;
+.main-header {
+  background-color: #945711; /* Color naranja/marrón principal */
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0.6rem 2rem;
+  color: #FFD700; /* Texto dorado */
+  position: relative;
+  z-index: 2000; /* Asegura que esté sobre todo */
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
 }
 
-.header h1 {
-  color: var(--gold);
-  font-size: 2rem;
+.header-logo {
+  cursor: pointer;
+  font-size: 1.4rem;
+  margin: 0;
+  text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.header-item {
+  position: relative;
+}
+
+/* Estilo común para botones del header */
+.header-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: #FFD700;
+  transform: translateY(-1px);
+}
+
+.header-badge {
+  background: #e74c3c;
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+  border: 1px solid white;
+}
+
+/* ESTILO DE LOS MENÚS DESPLEGABLES */
+.header-dropdown {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  width: 240px;
+  background: white;
+  color: #333;
+  padding: 12px !important;
+  border: 2px solid #945711 !important;
+  box-shadow: 6px 6px 0px #FFD700 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-title {
+  margin: 0 0 10px 0;
+  font-size: 0.85rem;
+  color: #945711;
+  text-transform: uppercase;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.dropdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f9f9f9;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mini-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
   font-size: 1.1rem;
+  transition: transform 0.1s;
+}
+
+.mini-btn:hover { transform: scale(1.2); }
+
+/* OPCIONES DE MENÚ DE USUARIO */
+.menu-link {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 10px;
+  font-weight: bold;
+  color: #444;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: 0.2s;
+}
+
+.menu-link:hover {
+  background: #fdf6e3;
+  color: #945711;
+}
+
+.auth-link {
+  color: #e67e22;
+}
+
+.divider {
+  height: 1px;
+  background: #eee;
+  margin: 6px 0;
+}
+
+.empty-text {
+  font-size: 0.8rem;
+  color: #999;
+  text-align: center;
+  padding: 10px;
 }
