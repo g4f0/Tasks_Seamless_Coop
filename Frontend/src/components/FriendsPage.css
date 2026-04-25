@@ -1,0 +1,45 @@
+.friends-page {
+  padding: 2rem 0;
+}
+
+.friends-page h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: var(--primary);
+}
+
+.friends-page > .btn {
+  margin-bottom: 2rem;
+}
+
+.friends-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+.friend-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.friend-card h3 {
+  font-size: 1.3rem;
+}
+
+.friend-card p {
+  color: #666;
+}
+
+.card-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.card-buttons .btn {
+  flex: 1;
+  font-size: 0.9rem;
+  padding: 0.5rem;
+}

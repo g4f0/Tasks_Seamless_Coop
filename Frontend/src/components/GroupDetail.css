@@ -1,0 +1,53 @@
+.group-detail {
+  padding: 2rem 0;
+}
+
+.group-detail h2 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  color: var(--primary);
+}
+
+.detail-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid var(--primary);
+  padding-bottom: 1rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-bottom: 3px solid transparent;
+}
+
+.tab-btn.active {
+  border-bottom: 3px solid var(--gold);
+  color: var(--gold);
+}
+
+.tab-btn:hover {
+  color: var(--gold);
+}
+
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.detail-content .card {
+  padding: 1.5rem;
+}
+
+.detail-content h4 {
+  font-size: 1.3rem;
+  margin-bottom: 0.5rem;
+}

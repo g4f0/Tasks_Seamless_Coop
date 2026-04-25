@@ -1,0 +1,30 @@
+.navbar {
+  background-color: var(--bg);
+  border-bottom: 3px solid var(--primary);
+  padding: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: var(--primary);
+  font-weight: bold;
+  font-size: 1.1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.nav-link:hover {
+  border-bottom: 2px solid var(--gold);
+  color: var(--gold);
+}
