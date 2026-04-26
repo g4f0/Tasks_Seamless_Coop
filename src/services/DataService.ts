@@ -66,8 +66,24 @@ export class DataService {
 
   public isApplyingRemoteUpdate = false;
 
+  private readonly STORAGE_KEY = "tsc-state-v1";
+  private readonly CURRENT_USER_KEY = "tsc-current-user-id";
+
   private constructor() {
-    this.seedData();
+    const loaded = this.loadFromStorage();
+    if (!loaded) this.seedData();
+
+    // Restaurar usuario actual explícitamente (si existe)
+    const savedUid = localStorage.getItem(this.CURRENT_USER_KEY);
+    if (savedUid) {
+      const uid = Number(savedUid);
+      this.currentUser = this.users.find(u => u.Id === uid) ?? this.currentUser;
+    }
+
+    // Si no hay currentUser pero snapshot ya lo tenía, persistir clave auxiliar
+    if (this.currentUser) {
+      localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
+    }
   }
 
   static getInstance(): DataService {
@@ -85,8 +101,34 @@ export class DataService {
   }
 
   emit = () => {
+    this.saveToStorage();
+    if (this.currentUser) {
+      localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
+    } else {
+      localStorage.removeItem(this.CURRENT_USER_KEY);
+    }
     this.listeners.forEach(l => l());
   };
+
+  private saveToStorage() {
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.exportSnapshot()));
+    } catch {
+      // noop
+    }
+  }
+
+  private loadFromStorage(): boolean {
+    try {
+      const raw = localStorage.getItem(this.STORAGE_KEY);
+      if (!raw) return false;
+      const snap = JSON.parse(raw) as AppSnapshot;
+      this.replaceStateFromSnapshot(snap);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   private seedData() {
     const user1 = new User("Usuario", "pass123", "Gestor de tareas y colaborador en múltiples gremios de convivencia.");
@@ -129,6 +171,8 @@ export class DataService {
 
     const request1 = new FriendRequest(user4.Id, user1.Id);
     this.friendRequests = [request1];
+
+    this.saveToStorage();
   }
 
   exportSnapshot(): AppSnapshot {
@@ -224,7 +268,9 @@ export class DataService {
 
         g.tasks.forEach((taskDTO, index) => {
           const task = group.Tasks[index];
-          task.Users = taskDTO.userIds.map(uid => userMap.get(uid)!).filter(Boolean);
+          if (task) {
+            task.Users = taskDTO.userIds.map(uid => userMap.get(uid)!).filter(Boolean);
+          }
         });
       });
 
@@ -258,6 +304,7 @@ export class DataService {
     );
     if (!user || user.Password !== password) return false;
     this.currentUser = user;
+    localStorage.setItem(this.CURRENT_USER_KEY, String(user.Id));
     this.emit();
     return true;
   }
@@ -269,12 +316,14 @@ export class DataService {
     const user = new User(name.trim(), password, "Nuevo aventurero.");
     this.users.push(user);
     this.currentUser = user;
+    localStorage.setItem(this.CURRENT_USER_KEY, String(user.Id));
     this.emit();
     return true;
   }
 
   logout() {
     this.currentUser = null;
+    localStorage.removeItem(this.CURRENT_USER_KEY);
     this.emit();
   }
 

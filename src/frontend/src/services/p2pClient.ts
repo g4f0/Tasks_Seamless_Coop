@@ -51,15 +51,18 @@ export async function joinGroupSession(groupId: string, inviteCode: string) {
 }
 
 export async function publishGroupSnapshot(groupId: string, snapshot: unknown) {
-  const r = await fetch(`${BASE}/p2p/group/publish`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ groupId, snapshot }),
-  });
-  // no throw duro para demo stable
-  if (!r.ok) {
-    const j = await parseJsonSafe(r);
-    console.warn("[p2p publish]", j?.error ?? r.statusText);
+  try {
+    const r = await fetch(`${BASE}/p2p/group/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupId, snapshot }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      console.warn("[publish]", j?.error ?? r.statusText);
+    }
+  } catch (e) {
+    console.warn("[publish] network", e);
   }
 }
 
@@ -91,4 +94,11 @@ export async function ensureGroupConnected(groupId: string, localInviteCode: str
 
   const created = await createGroupSession(groupId);
   return { connected: true, inviteCode: created.inviteCode ?? "" };
+}
+
+export async function getGroupLatest(groupId: string) {
+  const r = await fetch(`${BASE}/p2p/group/latest?groupId=${encodeURIComponent(groupId)}`);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j?.error ?? "No se pudo obtener latest");
+  return j as { ok: boolean; snapshot: any | null };
 }

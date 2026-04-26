@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDataService, useDataObserver } from '../../../services/DataContext';
 import { Challenge } from '../../../backend/challenge';
@@ -7,6 +8,7 @@ import {
   createGroupSession,
   joinGroupSession,
   getGroupStatus,
+  getGroupLatest,
   onGroupSnapshot,
   publishGroupSnapshot
 } from '../services/p2pClient';
@@ -38,6 +40,9 @@ const GroupDetail: React.FC = () => {
   const [p2pConnected, setP2pConnected] = useState(false);
   const [p2pMsg, setP2pMsg] = useState("");
 
+  const publishingRef = useRef(false);
+  const lastPublishRef = useRef(0);
+
   if (!group) return <div>Gremio no encontrado</div>;
 
   const tasks = useMemo(
@@ -53,25 +58,37 @@ const GroupDetail: React.FC = () => {
     [group.Tasks]
   );
 
-  // WS: recibir snapshots remotos
+  // 1) Suscripción WebSocket a snapshots remotos
   useEffect(() => {
-    const unsubWs = onGroupSnapshot((gid, snapshot) => {
+    const unsub = onGroupSnapshot((gid, snapshot) => {
       if (gid !== groupId) return;
       dataService.replaceStateFromSnapshot(snapshot);
     });
-    return unsubWs;
+    return unsub;
   }, [groupId, dataService]);
 
-  // Publicar cambios locales cuando estemos conectados
+  // 2) Publicar cambios locales (con anti-loop + throttle)
   useEffect(() => {
-    const unsubData = dataService.subscribe(async () => {
-      if (!p2pConnected || dataService.isApplyingRemoteUpdate) return;
-      await publishGroupSnapshot(groupId, dataService.exportSnapshot());
-    });
-    return unsubData;
-  }, [groupId, dataService, p2pConnected]);
+    const unsub = dataService.subscribe(async () => {
+      if (!p2pConnected) return;
+      if (dataService.isApplyingRemoteUpdate) return;
+      if (publishingRef.current) return;
 
-  // Polling estado bridge para UI
+      const now = Date.now();
+      if (now - lastPublishRef.current < 300) return;
+
+      publishingRef.current = true;
+      try {
+        await publishGroupSnapshot(groupId, dataService.exportSnapshot());
+        lastPublishRef.current = Date.now();
+      } finally {
+        publishingRef.current = false;
+      }
+    });
+    return unsub;
+  }, [groupId, p2pConnected, dataService]);
+
+  // 3) Polling de estado bridge (UI)
   useEffect(() => {
     let alive = true;
 
@@ -96,6 +113,17 @@ const GroupDetail: React.FC = () => {
     };
   }, [groupId, inviteCode]);
 
+  const hydrateFromP2POrPublishLocal = async () => {
+    const latest = await getGroupLatest(groupId);
+    if (latest?.snapshot) {
+      dataService.replaceStateFromSnapshot(latest.snapshot);
+      setP2pMsg("Estado del grupo cargado desde P2P.");
+    } else {
+      await publishGroupSnapshot(groupId, dataService.exportSnapshot());
+      setP2pMsg("Sin snapshot remoto. Publicado estado local.");
+    }
+  };
+
   const handleCreateSession = async () => {
     try {
       const r = await createGroupSession(groupId);
@@ -103,8 +131,8 @@ const GroupDetail: React.FC = () => {
       setInviteCode(code);
       localStorage.setItem(`p2p-invite-${groupId}`, code);
       setP2pConnected(true);
-      setP2pMsg("Sesión creada. Comparte el código con tu colega.");
-      await publishGroupSnapshot(groupId, dataService.exportSnapshot());
+      await hydrateFromP2POrPublishLocal();
+      setP2pMsg(prev => `${prev} Sesión creada. Comparte el código.`);
     } catch (e: any) {
       setP2pMsg(`Error al crear sesión: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
@@ -122,7 +150,8 @@ const GroupDetail: React.FC = () => {
       localStorage.setItem(`p2p-invite-${groupId}`, code);
       setInviteCode(code);
       setP2pConnected(true);
-      setP2pMsg("Unido al grupo P2P.");
+      await hydrateFromP2POrPublishLocal();
+      setP2pMsg(prev => `${prev} Unido al grupo P2P.`);
     } catch (e: any) {
       setP2pMsg(`Error al unirte: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
@@ -139,7 +168,8 @@ const GroupDetail: React.FC = () => {
       await joinGroupSession(groupId, saved);
       setInviteCode(saved);
       setP2pConnected(true);
-      setP2pMsg("Reconectado con código guardado.");
+      await hydrateFromP2POrPublishLocal();
+      setP2pMsg(prev => `${prev} Reconectado con código guardado.`);
     } catch (e: any) {
       setP2pMsg(`No se pudo reconectar: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
@@ -220,8 +250,8 @@ const GroupDetail: React.FC = () => {
         <p>Estado: <strong>{p2pConnected ? "ON" : "OFF"}</strong></p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-          <button onClick={handleCreateSession}>Crear sesión</button>
-          <button onClick={handleJoinSaved}>Reconectar (código guardado)</button>
+          <button type="button" onClick={handleCreateSession}>Crear sesión</button>
+          <button type="button" onClick={handleJoinSaved}>Reconectar (código guardado)</button>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
@@ -231,13 +261,13 @@ const GroupDetail: React.FC = () => {
             placeholder="Pega código de invitación"
             style={{ minWidth: 320 }}
           />
-          <button onClick={handleJoinSession}>Unirme con código</button>
+          <button type="button" onClick={handleJoinSession}>Unirme con código</button>
         </div>
 
         {inviteCode && (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <code style={{ userSelect: "all" }}>{inviteCode}</code>
-            <button onClick={copyInvite}>Copiar código</button>
+            <button type="button" onClick={copyInvite}>Copiar código</button>
           </div>
         )}
 
@@ -247,9 +277,9 @@ const GroupDetail: React.FC = () => {
       <div className="group-main-layout">
         <section className="calendar-section card">
           <div className="calendar-header">
-            <button onClick={() => changeMonth(-1)} className="btn-nav">◀</button>
+            <button type="button" onClick={() => changeMonth(-1)} className="btn-nav">◀</button>
             <h3>{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h3>
-            <button onClick={() => changeMonth(1)} className="btn-nav">▶</button>
+            <button type="button" onClick={() => changeMonth(1)} className="btn-nav">▶</button>
           </div>
           <div className="calendar-weekdays">
             {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => <div key={d}>{d}</div>)}
@@ -340,7 +370,7 @@ const GroupDetail: React.FC = () => {
                       onChange={(e) => setInputAmounts({ ...inputAmounts, [ch.Id]: Number(e.target.value) })}
                       placeholder="Cant."
                     />
-                    <button onClick={() => updateChallenge(ch.Id)}>Añadir</button>
+                    <button type="button" onClick={() => updateChallenge(ch.Id)}>Añadir</button>
                   </div>
                 </div>
               );
