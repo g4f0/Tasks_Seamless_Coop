@@ -12,13 +12,14 @@ const Dashboard: React.FC = () => {
   const currentUser = dataService.currentUser;
   const userGroups = currentUser ? currentUser.Groups : [];
 
-  const tasks = currentUser
-    ? userGroups.flatMap(g => g.Tasks.filter(t => !(t instanceof Challenge) && !(t instanceof Event) && t.Checked === 0)).slice(0, 3)
-    : [];
+  // Protegemos con flatMap que devuelva array vacío si algo falla
+  const tasks = userGroups.flatMap(g =>
+    (g?.Tasks ?? []).filter(t => !(t instanceof Challenge) && !(t instanceof Event) && t.Checked === 0)
+  ).slice(0, 3);
 
-  const events = currentUser
-    ? userGroups.flatMap(g => g.Tasks.filter(t => t instanceof Event) as Event[]).slice(0, 3)
-    : [];
+  const events = userGroups.flatMap(g =>
+    (g?.Tasks ?? []).filter(t => t instanceof Event) as Event[]
+  ).slice(0, 3);
 
   const toggleTask = (id: number) => {
     dataService.toggleTask(id);
@@ -49,7 +50,7 @@ const Dashboard: React.FC = () => {
                   <span className="group-avatar">🏠</span>
                   <div className="group-info">
                     <h3>{group.Name}</h3>
-                    <p>{group.Users.length} miembros • {group.Tasks.length} items</p>
+                    <p>{group.Users?.length || 0} miembros • {group.Tasks?.length || 0} items</p>
                   </div>
                   <span className="arrow-icon">➜</span>
                 </div>
@@ -61,15 +62,21 @@ const Dashboard: React.FC = () => {
         <section className="dashboard-panel events-panel card">
           <div className="panel-header"><h2>📅 Próximos Eventos</h2></div>
           <div className="events-mini-list">
-            {events.map(ev => (
-              <div key={ev.Id} className="event-item-mini">
-                <div className="event-date"><span>{ev.EndDate.getDate()}</span><span>{ev.EndDate.toLocaleString('es-ES', { month: 'short' }).toUpperCase()}</span></div>
-                <div className="event-details">
-                  <h4>{ev.Name}</h4>
-                  <p>{ev.Description}</p>
+            {events.map(ev => {
+              const evDate = ev?.EndDate ? new Date(ev.EndDate) : null;
+              return (
+                <div key={ev.Id} className="event-item-mini">
+                  <div className="event-date">
+                    <span>{evDate ? evDate.getDate() : '?'}</span>
+                    <span>{evDate ? evDate.toLocaleString('es-ES', { month: 'short' }).toUpperCase() : ''}</span>
+                  </div>
+                  <div className="event-details">
+                    <h4>{ev.Name}</h4>
+                    <p>{ev.Description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -88,7 +95,7 @@ const Dashboard: React.FC = () => {
         <section className="dashboard-panel challenges-panel card">
           <div className="panel-header"><h2>🏆 Retos Activos</h2></div>
           <div className="challenges-mini-list">
-            {userGroups.flatMap(g => g.Tasks.filter(t => t instanceof Challenge)).map(challenge => {
+            {userGroups.flatMap(g => (g?.Tasks ?? []).filter(t => t instanceof Challenge)).map(challenge => {
               const ch = challenge as Challenge;
               const percent = ch.StatB ? (ch.StatA / ch.StatB) * 100 : 0;
               return (
