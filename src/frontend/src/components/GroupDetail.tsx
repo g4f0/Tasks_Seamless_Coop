@@ -1,9 +1,8 @@
-
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useDataService, useDataObserver } from '../../../services/DataContext';
-import { Challenge } from '../../../backend/challenge';
-import { Event } from '../../../backend/event';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { useDataService, useDataObserver } from "../../../services/DataContext";
+import { Challenge } from "../../../backend/challenge";
+import { Event } from "../../../backend/event";
 import {
   createGroupSession,
   joinGroupSession,
@@ -11,8 +10,8 @@ import {
   getGroupLatest,
   onGroupSnapshot,
   publishGroupSnapshot
-} from '../services/p2pClient';
-import './GroupDetail.css';
+} from "../services/p2pClient";
+import "./GroupDetail.css";
 
 type CreateType = "Task" | "Event" | "Challenge";
 
@@ -20,8 +19,8 @@ const GroupDetail: React.FC = () => {
   useDataObserver();
   const { id } = useParams<{ id: string }>();
   const dataService = useDataService();
-  const group = dataService.groups.find(g => g.Id === Number(id));
   const groupId = String(id ?? "");
+  const group = dataService.groups.find(g => g.Id === Number(id));
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [inputAmounts, setInputAmounts] = useState<Record<number, number>>({});
@@ -43,35 +42,35 @@ const GroupDetail: React.FC = () => {
   const publishingRef = useRef(false);
   const lastPublishRef = useRef(0);
 
-  if (!group) return <div>Gremio no encontrado</div>;
-
+  // IMPORTANT: hooks always run, even if group is null
   const tasks = useMemo(
-    () => group.Tasks.filter(t => !(t instanceof Challenge) && !(t instanceof Event)),
-    [group.Tasks]
+    () => (group ? group.Tasks.filter(t => !(t instanceof Challenge) && !(t instanceof Event)) : []),
+    [group]
   );
   const events = useMemo(
-    () => group.Tasks.filter(t => t instanceof Event) as Event[],
-    [group.Tasks]
+    () => (group ? (group.Tasks.filter(t => t instanceof Event) as Event[]) : []),
+    [group]
   );
   const challenges = useMemo(
-    () => group.Tasks.filter(t => t instanceof Challenge) as Challenge[],
-    [group.Tasks]
+    () => (group ? (group.Tasks.filter(t => t instanceof Challenge) as Challenge[]) : []),
+    [group]
   );
 
-  // 1) Suscripción WebSocket a snapshots remotos
-useEffect(() => {
-  const unsub = onGroupSnapshot((gid, snapshot) => {
-    if (gid !== groupId) return;
-    try {
-      dataService.replaceStateFromSnapshot(snapshot);
-    } catch (e) {
-      console.error("[GroupDetail] snapshot apply failed", e);
-    }
-  });
-  return unsub;
-}, [groupId, dataService]);
+  // WS snapshots
+  useEffect(() => {
+    const unsub = onGroupSnapshot((gid, snapshot) => {
+      if (gid !== groupId) return;
+      console.log("[P2P][WS] snapshot recibido", { gid, hasSnapshot: !!snapshot });
+      try {
+        dataService.replaceStateFromSnapshot(snapshot);
+      } catch (e) {
+        console.error("[GroupDetail] snapshot apply failed", e);
+      }
+    });
+    return unsub;
+  }, [groupId, dataService]);
 
-  // 2) Publicar cambios locales (con anti-loop + throttle)
+  // Publish local changes
   useEffect(() => {
     const unsub = dataService.subscribe(async () => {
       if (!p2pConnected) return;
@@ -83,8 +82,12 @@ useEffect(() => {
 
       publishingRef.current = true;
       try {
+        console.log("[P2P][PUBLISH] start", { groupId });
         await publishGroupSnapshot(groupId, dataService.exportSnapshot());
         lastPublishRef.current = Date.now();
+        console.log("[P2P][PUBLISH] ok", { groupId });
+      } catch (e) {
+        console.error("[P2P][PUBLISH] error", e);
       } finally {
         publishingRef.current = false;
       }
@@ -92,7 +95,7 @@ useEffect(() => {
     return unsub;
   }, [groupId, p2pConnected, dataService]);
 
-  // 3) Polling de estado bridge (UI)
+  // Poll bridge status
   useEffect(() => {
     let alive = true;
 
@@ -102,9 +105,10 @@ useEffect(() => {
         if (!alive) return;
         setP2pConnected(!!st.connected);
         if (st.inviteCode && !inviteCode) setInviteCode(st.inviteCode);
-      } catch {
+      } catch (e) {
         if (!alive) return;
         setP2pConnected(false);
+        console.warn("[P2P][STATUS] error", e);
       }
     };
 
@@ -118,11 +122,14 @@ useEffect(() => {
   }, [groupId, inviteCode]);
 
   const hydrateFromP2POrPublishLocal = async () => {
+    console.log("[P2P][HYDRATE] fetching latest", { groupId });
     const latest = await getGroupLatest(groupId);
     if (latest?.snapshot) {
+      console.log("[P2P][HYDRATE] latest encontrado -> apply");
       dataService.replaceStateFromSnapshot(latest.snapshot);
       setP2pMsg("Estado del grupo cargado desde P2P.");
     } else {
+      console.log("[P2P][HYDRATE] sin latest -> publish local");
       await publishGroupSnapshot(groupId, dataService.exportSnapshot());
       setP2pMsg("Sin snapshot remoto. Publicado estado local.");
     }
@@ -130,14 +137,23 @@ useEffect(() => {
 
   const handleCreateSession = async () => {
     try {
+      console.log("[P2P][CREATE CLICK]", { groupId });
       const r = await createGroupSession(groupId);
       const code = r.inviteCode ?? "";
+      console.log("[P2P][CREATE OK]", { groupId, codeLen: code.length });
+
       setInviteCode(code);
       localStorage.setItem(`p2p-invite-${groupId}`, code);
       setP2pConnected(true);
+
       await hydrateFromP2POrPublishLocal();
-      setP2pMsg(prev => `${prev} Sesión creada. Comparte el código.`);
+
+      const st = await getGroupStatus(groupId);
+      console.log("[P2P][STATUS AFTER CREATE]", st);
+
+      setP2pMsg("Sesión creada. Comparte el código.");
     } catch (e: any) {
+      console.error("[P2P][CREATE ERROR]", e);
       setP2pMsg(`Error al crear sesión: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
     }
@@ -146,17 +162,28 @@ useEffect(() => {
   const handleJoinSession = async () => {
     try {
       const code = joinCode.trim();
+      console.log("[P2P][JOIN CLICK]", { groupId, codeLen: code.length });
+
       if (!code) {
         setP2pMsg("Pega un código de invitación.");
         return;
       }
+
       await joinGroupSession(groupId, code);
+      console.log("[P2P][JOIN OK]", { groupId });
+
       localStorage.setItem(`p2p-invite-${groupId}`, code);
       setInviteCode(code);
       setP2pConnected(true);
+
       await hydrateFromP2POrPublishLocal();
-      setP2pMsg(prev => `${prev} Unido al grupo P2P.`);
+
+      const st = await getGroupStatus(groupId);
+      console.log("[P2P][STATUS AFTER JOIN]", st);
+
+      setP2pMsg("Unido al grupo P2P.");
     } catch (e: any) {
+      console.error("[P2P][JOIN ERROR]", e);
       setP2pMsg(`Error al unirte: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
     }
@@ -165,16 +192,27 @@ useEffect(() => {
   const handleJoinSaved = async () => {
     try {
       const saved = localStorage.getItem(`p2p-invite-${groupId}`) ?? "";
+      console.log("[P2P][REJOIN CLICK]", { groupId, codeLen: saved.length });
+
       if (!saved) {
         setP2pMsg("No hay código guardado para este grupo.");
         return;
       }
+
       await joinGroupSession(groupId, saved);
+      console.log("[P2P][REJOIN OK]", { groupId });
+
       setInviteCode(saved);
       setP2pConnected(true);
+
       await hydrateFromP2POrPublishLocal();
-      setP2pMsg(prev => `${prev} Reconectado con código guardado.`);
+
+      const st = await getGroupStatus(groupId);
+      console.log("[P2P][STATUS AFTER REJOIN]", st);
+
+      setP2pMsg("Reconectado con código guardado.");
     } catch (e: any) {
+      console.error("[P2P][REJOIN ERROR]", e);
       setP2pMsg(`No se pudo reconectar: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
     }
@@ -188,7 +226,8 @@ useEffect(() => {
       }
       await navigator.clipboard.writeText(inviteCode);
       setP2pMsg("Código copiado.");
-    } catch {
+    } catch (e) {
+      console.error("[P2P][COPY ERROR]", e);
       setP2pMsg("No se pudo copiar el código.");
     }
   };
@@ -206,6 +245,7 @@ useEffect(() => {
   };
 
   const toggleTask = (taskId: number) => {
+    if (!group) return;
     dataService.toggleTask(taskId, group.Id);
   };
 
@@ -214,13 +254,15 @@ useEffect(() => {
     const challenge = challenges.find(c => c.Id === challengeId);
     if (challenge) {
       challenge.StatA += val;
-      setInputAmounts({ ...inputAmounts, [challengeId]: 0 });
+      setInputAmounts(prev => ({ ...prev, [challengeId]: 0 }));
       dataService.emit();
     }
   };
 
   const handleCreateItem = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!group) return;
+
     const date = endDate ? new Date(endDate) : new Date();
 
     if (createType === "Task") {
@@ -242,6 +284,10 @@ useEffect(() => {
     setLoseCondition("");
     setStatB(100);
   };
+
+  if (!group) {
+    return <div>Gremio no encontrado</div>;
+  }
 
   return (
     <div className="group-detail">
@@ -286,7 +332,7 @@ useEffect(() => {
             <button type="button" onClick={() => changeMonth(1)} className="btn-nav">▶</button>
           </div>
           <div className="calendar-weekdays">
-            {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => <div key={d}>{d}</div>)}
+            {["L", "M", "X", "J", "V", "S", "D"].map(d => <div key={d}>{d}</div>)}
           </div>
           <div className="calendar-grid">
             {[...Array(startingDay)].map((_, i) => <div key={`s-${i}`} className="calendar-day empty"></div>)}
@@ -334,7 +380,7 @@ useEffect(() => {
             <h3>📝 Tareas</h3>
             <ul className="list-items">
               {tasks.map(task => (
-                <li key={task.Id} className={task.Checked === 1 ? 'completed' : ''}>
+                <li key={task.Id} className={task.Checked === 1 ? "completed" : ""}>
                   <input type="checkbox" checked={task.Checked === 1} onChange={() => toggleTask(task.Id)} />
                   <span>{task.Name}</span>
                 </li>
@@ -370,7 +416,7 @@ useEffect(() => {
                   <div className="challenge-controls-custom">
                     <input
                       type="number"
-                      value={inputAmounts[ch.Id] || ''}
+                      value={inputAmounts[ch.Id] || ""}
                       onChange={(e) => setInputAmounts({ ...inputAmounts, [ch.Id]: Number(e.target.value) })}
                       placeholder="Cant."
                     />
