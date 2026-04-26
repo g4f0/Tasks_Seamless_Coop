@@ -7,7 +7,6 @@ function ensureWs() {
   if (ws) return;
   const wsUrl = BASE.replace("http://", "ws://").replace("https://", "wss://");
   ws = new WebSocket(wsUrl);
-
   ws.onmessage = (ev) => {
     try {
       const msg = JSON.parse(ev.data);
@@ -16,10 +15,7 @@ function ensureWs() {
       }
     } catch {}
   };
-
-  ws.onclose = () => {
-    ws = null;
-  };
+  ws.onclose = () => { ws = null; };
 }
 
 export function onGroupSnapshot(cb: (groupId: string, snapshot: any) => void) {
@@ -28,14 +24,19 @@ export function onGroupSnapshot(cb: (groupId: string, snapshot: any) => void) {
   return () => listeners.delete(cb);
 }
 
+async function parseJsonSafe(r: Response) {
+  try { return await r.json(); } catch { return null; }
+}
+
 export async function createGroupSession(groupId: string) {
   const r = await fetch(`${BASE}/p2p/group/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ groupId }),
   });
-  if (!r.ok) throw new Error("No se pudo crear sesión del grupo");
-  return r.json() as Promise<{ ok: boolean; inviteCode?: string; error?: string }>;
+  const j = await parseJsonSafe(r);
+  if (!r.ok) throw new Error(j?.error ?? "No se pudo crear sesión del grupo");
+  return j as { ok: boolean; inviteCode?: string; error?: string };
 }
 
 export async function joinGroupSession(groupId: string, inviteCode: string) {
@@ -44,20 +45,50 @@ export async function joinGroupSession(groupId: string, inviteCode: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ groupId, inviteCode }),
   });
-  if (!r.ok) throw new Error("No se pudo unir al grupo P2P");
-  return r.json() as Promise<{ ok: boolean; error?: string }>;
+  const j = await parseJsonSafe(r);
+  if (!r.ok) throw new Error(j?.error ?? "No se pudo unir al grupo P2P");
+  return j as { ok: boolean; error?: string };
 }
 
 export async function publishGroupSnapshot(groupId: string, snapshot: unknown) {
-  await fetch(`${BASE}/p2p/group/publish`, {
+  const r = await fetch(`${BASE}/p2p/group/publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ groupId, snapshot }),
   });
+  // no throw duro para demo stable
+  if (!r.ok) {
+    const j = await parseJsonSafe(r);
+    console.warn("[p2p publish]", j?.error ?? r.statusText);
+  }
 }
 
 export async function getGroupStatus(groupId: string) {
   const r = await fetch(`${BASE}/p2p/group/status?groupId=${encodeURIComponent(groupId)}`);
-  if (!r.ok) throw new Error("No se pudo obtener estado de grupo");
-  return r.json() as Promise<{ ok: boolean; connected: boolean; inviteCode: string | null }>;
+  const j = await parseJsonSafe(r);
+  if (!r.ok) throw new Error(j?.error ?? "No se pudo obtener estado de grupo");
+  return j as { ok: boolean; connected: boolean; inviteCode: string | null };
+}
+
+/**
+ * Boot estable:
+ * 1) status
+ * 2) si hay invite local -> join
+ * 3) si no, create
+ * Nunca create directo sin comprobar.
+ */
+export async function ensureGroupConnected(groupId: string, localInviteCode: string | null) {
+  const status = await getGroupStatus(groupId);
+
+  if (status.connected) {
+    return { connected: true, inviteCode: status.inviteCode ?? localInviteCode ?? "" };
+  }
+
+  if (localInviteCode) {
+    await joinGroupSession(groupId, localInviteCode);
+    return { connected: true, inviteCode: localInviteCode };
+  }
+
+  const created = await createGroupSession(groupId);
+  return { connected: true, inviteCode: created.inviteCode ?? "" };
 }

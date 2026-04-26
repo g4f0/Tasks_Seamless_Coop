@@ -26,6 +26,7 @@ const wss = new WebSocketServer({ server });
 const HOST = process.env.P2P_HOST ?? "0.0.0.0";
 const PORT = Number(process.env.P2P_PORT ?? 4312);
 const BASE_STORE = process.env.P2P_STORE_BASE ?? "./.p2p-store";
+const PROCESS_TAG = String(process.pid);
 
 const groups = new Map<string, GroupState>();
 
@@ -33,7 +34,7 @@ function snapshotKey(groupId: string) {
   return `group:${groupId}:snapshot`;
 }
 function storePath(groupId: string) {
-  return `${BASE_STORE}/${groupId}`;
+  return `${BASE_STORE}/${PROCESS_TAG}/${groupId}`;
 }
 function ensureGroup(groupId: string): GroupState {
   if (!groups.has(groupId)) {
@@ -130,8 +131,9 @@ app.post("/p2p/group/create", async (req, res) => {
     const st = await createGroupSession(groupId);
     res.json({ ok: true, inviteCode: st.inviteCode });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "create error" });
-  }
+  console.error("CREATE ERROR", e);
+  res.status(500).json({ ok: false, error: e?.message ?? "create error" });
+}
 });
 
 app.post("/p2p/group/join", async (req, res) => {
