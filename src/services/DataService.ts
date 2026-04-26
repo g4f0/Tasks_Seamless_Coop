@@ -100,15 +100,19 @@ export class DataService {
     };
   }
 
-  emit = () => {
-    this.saveToStorage();
-    if (this.currentUser) {
-      localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
-    } else {
-      localStorage.removeItem(this.CURRENT_USER_KEY);
-    }
-    this.listeners.forEach(l => l());
-  };
+emit = () => {
+  this.saveToStorage();
+  if (this.currentUser) {
+    localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
+  } else {
+    localStorage.removeItem(this.CURRENT_USER_KEY);
+  }
+
+  // evita que un listener rompa toda la app
+  this.listeners.forEach((l) => {
+    try { l(); } catch (e) { console.error("[DataService] listener error", e); }
+  });
+};
 
   private saveToStorage() {
     try {
@@ -225,78 +229,90 @@ export class DataService {
     };
   }
 
-  replaceStateFromSnapshot(snapshot: AppSnapshot) {
-    this.isApplyingRemoteUpdate = true;
-    try {
-      const userMap = new Map<number, User>();
-      for (const u of snapshot.users) {
-        const user = new User(u.name, u.password, u.description);
-        userMap.set(u.id, user);
-      }
+ private isValidSnapshot(snapshot: any): snapshot is AppSnapshot {
+  return !!snapshot
+    && Array.isArray(snapshot.users)
+    && Array.isArray(snapshot.groups)
+    && Array.isArray(snapshot.friendRequests)
+    && ("currentUserId" in snapshot);
+}
 
-      const groupMap = new Map<number, Group>();
-      for (const g of snapshot.groups) {
-        const group = new Group(g.name, g.description);
-
-        const tasks: Task[] = g.tasks.map(t => {
-          if (t.type === "Challenge") {
-            return new Challenge(
-              t.checked,
-              t.priority,
-              t.name,
-              t.description,
-              new Date(t.endDate),
-              t.winCondition ?? "",
-              t.loseCondition ?? "",
-              t.statA ?? 0,
-              t.statB ?? 0
-            );
-          }
-          if (t.type === "Event") {
-            return new Event(t.priority, t.name, t.description, new Date(t.endDate));
-          }
-          return new Task(t.checked, t.priority, t.name, t.description, new Date(t.endDate));
-        });
-
-        group.Tasks = tasks;
-        groupMap.set(g.id, group);
-      }
-
-      snapshot.groups.forEach(g => {
-        const group = groupMap.get(g.id)!;
-        group.Users = g.userIds.map(uid => userMap.get(uid)!).filter(Boolean);
-
-        g.tasks.forEach((taskDTO, index) => {
-          const task = group.Tasks[index];
-          if (task) {
-            task.Users = taskDTO.userIds.map(uid => userMap.get(uid)!).filter(Boolean);
-          }
-        });
-      });
-
-      snapshot.users.forEach(u => {
-        const user = userMap.get(u.id)!;
-        user.Friends = u.friendIds.map(fid => userMap.get(fid)!).filter(Boolean);
-        user.Groups = u.groupIds.map(gid => groupMap.get(gid)!).filter(Boolean);
-      });
-
-      const requests = snapshot.friendRequests.map(r => {
-        const fr = new FriendRequest(r.idUserSrc, r.idUserDest);
-        fr.Accepted = r.accepted;
-        return fr;
-      });
-
-      this.users = Array.from(userMap.values());
-      this.groups = Array.from(groupMap.values());
-      this.friendRequests = requests;
-      this.currentUser = snapshot.currentUserId !== null ? (userMap.get(snapshot.currentUserId) ?? null) : null;
-
-      this.emit();
-    } finally {
-      this.isApplyingRemoteUpdate = false;
-    }
+replaceStateFromSnapshot(snapshot: AppSnapshot | any) {
+  if (!this.isValidSnapshot(snapshot)) {
+    console.warn("[DataService] Snapshot inválido, ignorado");
+    return;
   }
 
+  this.isApplyingRemoteUpdate = true;
+  try {
+    const userMap = new Map<number, User>();
+    for (const u of snapshot.users) {
+      if (typeof u?.id !== "number") continue;
+      const user = new User(u.name ?? "", u.password ?? "", u.description ?? "");
+      userMap.set(u.id, user);
+    }
+
+    const groupMap = new Map<number, Group>();
+    for (const g of snapshot.groups) {
+      if (typeof g?.id !== "number") continue;
+      const group = new Group(g.name ?? "", g.description ?? "");
+
+      const tasks: Task[] = (g.tasks ?? []).map((t: any) => {
+        if (t?.type === "Challenge") {
+          return new Challenge(
+            t.checked ?? 0, t.priority ?? 1, t.name ?? "", t.description ?? "",
+            new Date(t.endDate ?? Date.now()), t.winCondition ?? "", t.loseCondition ?? "",
+            t.statA ?? 0, t.statB ?? 0
+          );
+        }
+        if (t?.type === "Event") {
+          return new Event(t.priority ?? 1, t.name ?? "", t.description ?? "", new Date(t.endDate ?? Date.now()));
+        }
+        return new Task(t?.checked ?? 0, t?.priority ?? 1, t?.name ?? "", t?.description ?? "", new Date(t?.endDate ?? Date.now()));
+      });
+
+      group.Tasks = tasks;
+      groupMap.set(g.id, group);
+    }
+
+    for (const g of snapshot.groups) {
+      const group = groupMap.get(g.id);
+      if (!group) continue;
+      group.Users = (g.userIds ?? []).map((uid: number) => userMap.get(uid)).filter(Boolean) as User[];
+
+      (g.tasks ?? []).forEach((taskDTO: any, index: number) => {
+        const task = group.Tasks[index];
+        if (!task) return;
+        task.Users = (taskDTO.userIds ?? []).map((uid: number) => userMap.get(uid)).filter(Boolean) as User[];
+      });
+    }
+
+    for (const u of snapshot.users) {
+      const user = userMap.get(u.id);
+      if (!user) continue;
+      user.Friends = (u.friendIds ?? []).map((fid: number) => userMap.get(fid)).filter(Boolean) as User[];
+      user.Groups = (u.groupIds ?? []).map((gid: number) => groupMap.get(gid)).filter(Boolean) as Group[];
+    }
+
+    const requests = (snapshot.friendRequests ?? []).map((r: any) => {
+      const fr = new FriendRequest(r.idUserSrc ?? 0, r.idUserDest ?? 0);
+      fr.Accepted = !!r.accepted;
+      return fr;
+    });
+
+    this.users = Array.from(userMap.values());
+    this.groups = Array.from(groupMap.values());
+    this.friendRequests = requests;
+    this.currentUser = snapshot.currentUserId !== null ? (userMap.get(snapshot.currentUserId) ?? null) : null;
+
+    this.emit();
+  } catch (err) {
+    console.error("[DataService] Error aplicando snapshot remoto:", err);
+    // NO rethrow -> evita pantalla blanca
+  } finally {
+    this.isApplyingRemoteUpdate = false;
+  }
+}
   login(nameOrEmail: string, password: string): boolean {
     const normalized = nameOrEmail.trim().toLowerCase();
     const user = this.users.find(

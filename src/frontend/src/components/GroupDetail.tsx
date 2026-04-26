@@ -59,13 +59,17 @@ const GroupDetail: React.FC = () => {
   );
 
   // 1) Suscripción WebSocket a snapshots remotos
-  useEffect(() => {
-    const unsub = onGroupSnapshot((gid, snapshot) => {
-      if (gid !== groupId) return;
+useEffect(() => {
+  const unsub = onGroupSnapshot((gid, snapshot) => {
+    if (gid !== groupId) return;
+    try {
       dataService.replaceStateFromSnapshot(snapshot);
-    });
-    return unsub;
-  }, [groupId, dataService]);
+    } catch (e) {
+      console.error("[GroupDetail] snapshot apply failed", e);
+    }
+  });
+  return unsub;
+}, [groupId, dataService]);
 
   // 2) Publicar cambios locales (con anti-loop + throttle)
   useEffect(() => {
