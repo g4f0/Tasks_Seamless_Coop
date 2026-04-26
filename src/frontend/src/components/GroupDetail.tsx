@@ -6,7 +6,6 @@ import { Event } from "../../../backend/event";
 import {
   createGroupSession,
   joinGroupSession,
-  getGroupStatus,
   getGroupLatest,
   onGroupSnapshot,
   publishGroupSnapshot
@@ -39,7 +38,6 @@ const GroupDetail: React.FC = () => {
 
   const groupId = hasValidId ? String(parsedId) : "";
 
-  // ── Estados ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [inputAmounts, setInputAmounts] = useState<Record<number, number>>({});
@@ -57,7 +55,6 @@ const GroupDetail: React.FC = () => {
   const [p2pMsg, setP2pMsg] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // ── Memos ─────────────────────────────────────────────────────────────────
   const eventsByDay = useMemo(() => {
     const map: Record<number, Event[]> = {};
     if (!group) return map;
@@ -86,11 +83,9 @@ const GroupDetail: React.FC = () => {
     return cells;
   }, [currentDate]);
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
   const publishingRef = useRef(false);
   const lastPublishRef = useRef(0);
 
-  // ── Efectos ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!hasValidId) return;
     const unsub = onGroupSnapshot((gid, snapshot) => {
@@ -104,15 +99,13 @@ const GroupDetail: React.FC = () => {
     return unsub;
   }, [groupId, dataService, hasValidId]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  const handlePrevMonth = () => {
+  const handlePrevMonth = () =>
     setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
-  };
 
-  const handleNextMonth = () => {
+  const handleNextMonth = () =>
     setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
-  };
 
+  // Toggle usando el índice dentro del array del grupo para evitar problemas con IDs duplicados
   const handleToggleTask = (taskId: number) => {
     dataService.toggleTask(taskId, parsedId);
   };
@@ -123,7 +116,6 @@ const GroupDetail: React.FC = () => {
 
   const handleAddProgress = (challenge: Challenge) => {
     const amount = inputAmounts[challenge.Id] ?? 1;
-    // DataService no expone addChallengeProgress, mutamos directamente y emitimos
     challenge.StatA = Math.min((challenge.StatA ?? 0) + amount, challenge.StatB ?? 100);
     dataService.emit();
     setInputAmounts(prev => ({ ...prev, [challenge.Id]: 1 }));
@@ -161,60 +153,33 @@ const GroupDetail: React.FC = () => {
 
   const handleCreateItem = () => {
     if (!name.trim()) return;
-
     const resolvedEndDate = endDate ? new Date(endDate) : new Date();
 
     if (createType === "Task") {
-      dataService.addTaskToGroup(parsedId, {
-        name,
-        description,
-        priority,
-        endDate: resolvedEndDate,
-      });
+      dataService.addTaskToGroup(parsedId, { name, description, priority, endDate: resolvedEndDate });
     } else if (createType === "Event") {
-      dataService.addEventToGroup(parsedId, {
-        name,
-        description,
-        priority,
-        endDate: resolvedEndDate,
-      });
+      dataService.addEventToGroup(parsedId, { name, description, priority, endDate: resolvedEndDate });
     } else if (createType === "Challenge") {
       dataService.addChallengeToGroup(parsedId, {
-        name,
-        description,
-        priority,
-        endDate: resolvedEndDate,
-        winCondition,
-        loseCondition,
-        statA: 0,
-        statB,
+        name, description, priority, endDate: resolvedEndDate,
+        winCondition, loseCondition, statA: 0, statB,
       });
     }
 
-    // Reset form
-    setName("");
-    setDescription("");
-    setPriority(1);
-    setEndDate("");
-    setWinCondition("");
-    setLoseCondition("");
-    setStatB(100);
+    setName(""); setDescription(""); setPriority(1); setEndDate("");
+    setWinCondition(""); setLoseCondition(""); setStatB(100);
     setShowCreateForm(false);
 
-    // Sync p2p
     if (p2pConnected) {
-      const snapshot = dataService.exportSnapshot();
-      publishGroupSnapshot(groupId, snapshot).catch(console.error);
+      publishGroupSnapshot(groupId, dataService.exportSnapshot()).catch(console.error);
     }
   };
 
-  // ── Guards ────────────────────────────────────────────────────────────────
   if (!hasValidId) return <div>ID de gremio inválido</div>;
   if (!group) return <div>Gremio no encontrado</div>;
 
   const members = Array.isArray(group.Users) ? group.Users : [];
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="group-detail">
 
@@ -237,26 +202,20 @@ const GroupDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/*  TAB: DASHBOARD                                                   */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* ── TAB DASHBOARD ── */}
       {activeTab === "dashboard" && (
         <div className="group-main-layout">
 
-          {/* ── LEFT: CALENDARIO ── */}
+          {/* CALENDARIO */}
           <div className="card calendar-section">
             <div className="calendar-header">
               <button className="btn-nav" onClick={handlePrevMonth}>‹</button>
-              <strong>
-                {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </strong>
+              <strong>{MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}</strong>
               <button className="btn-nav" onClick={handleNextMonth}>›</button>
             </div>
-
             <div className="calendar-weekdays">
               {WEEKDAYS.map(d => <span key={d}>{d}</span>)}
             </div>
-
             <div className="calendar-grid">
               {calendarDays.map((day, i) => (
                 <div key={i} className={`calendar-day ${day === null ? "empty" : ""}`}>
@@ -275,52 +234,51 @@ const GroupDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* ── RIGHT: SIDEBAR ── */}
+          {/* SIDEBAR */}
           <div className="sidebar-section">
 
-            {/* ── TAREAS ── */}
+            {/* TAREAS */}
             <div className="card">
               <div className="side-header">
                 <h3>✅ Tareas</h3>
-                <button
-                  className="btn-add"
-                  title="Añadir tarea"
-                  onClick={() => { setCreateType("Task"); setShowCreateForm(true); }}
-                >+</button>
+                <button className="btn-add" onClick={() => { setCreateType("Task"); setShowCreateForm(true); }}>+</button>
               </div>
               {tasks.length === 0 && (
-                <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-                  Sin tareas. ¡Crea la primera!
-                </p>
+                <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>Sin tareas. ¡Crea la primera!</p>
               )}
               <ul className="list-items">
                 {tasks.map((t: any) => (
-                  <li key={t.Id} className={t.Completed ? "completed" : ""}>
+                  <li
+                    key={t.Id}
+                    className={t.Checked === 1 ? "completed" : ""}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => handleToggleTask(t.Id)}
+                  >
                     <input
                       type="checkbox"
-                      checked={!!t.Completed}
+                      checked={t.Checked === 1}
                       onChange={() => handleToggleTask(t.Id)}
+                      onClick={e => e.stopPropagation()}
                     />
-                    <span>{t.Name}</span>
+                    <span style={{
+                      textDecoration: t.Checked === 1 ? "line-through" : "none",
+                      color: t.Checked === 1 ? "#aaa" : "inherit"
+                    }}>
+                      {t.Name}
+                    </span>
                   </li>
                 ))}
               </ul>
             </div>
 
-            {/* ── EVENTOS ── */}
+            {/* EVENTOS */}
             <div className="card">
               <div className="side-header">
                 <h3>📅 Eventos</h3>
-                <button
-                  className="btn-add"
-                  title="Añadir evento"
-                  onClick={() => { setCreateType("Event"); setShowCreateForm(true); }}
-                >+</button>
+                <button className="btn-add" onClick={() => { setCreateType("Event"); setShowCreateForm(true); }}>+</button>
               </div>
               {events.length === 0 && (
-                <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-                  Sin eventos este mes.
-                </p>
+                <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>Sin eventos.</p>
               )}
               <ul className="list-items">
                 {events.map(ev => (
@@ -339,25 +297,19 @@ const GroupDetail: React.FC = () => {
               </ul>
             </div>
 
-            {/* ── RETOS ── */}
+            {/* RETOS */}
             <div className="card">
               <div className="side-header">
                 <h3>⚔️ Retos</h3>
-                <button
-                  className="btn-add"
-                  title="Añadir reto"
-                  onClick={() => { setCreateType("Challenge"); setShowCreateForm(true); }}
-                >+</button>
+                <button className="btn-add" onClick={() => { setCreateType("Challenge"); setShowCreateForm(true); }}>+</button>
               </div>
               {challenges.length === 0 && (
-                <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-                  Sin retos activos.
-                </p>
+                <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>Sin retos activos.</p>
               )}
               <div className="challenge-container">
                 {challenges.map(ch => {
-                  const current = (ch as any).StatA ?? 0;
-                  const total = (ch as any).StatB ?? 100;
+                  const current = ch.StatA ?? 0;
+                  const total = ch.StatB ?? 100;
                   const pct = Math.min(100, Math.round((current / total) * 100));
                   return (
                     <div key={ch.Id} style={{ marginBottom: "1rem" }}>
@@ -376,9 +328,7 @@ const GroupDetail: React.FC = () => {
                           value={inputAmounts[ch.Id] ?? 1}
                           onChange={e => handleInputAmount(ch.Id, Number(e.target.value))}
                         />
-                        <button onClick={() => handleAddProgress(ch)}>
-                          + Añadir progreso
-                        </button>
+                        <button onClick={() => handleAddProgress(ch)}>+ Añadir progreso</button>
                       </div>
                     </div>
                   );
@@ -386,13 +336,11 @@ const GroupDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* ── P2P ── */}
+            {/* P2P */}
             <div className="card">
               <h3>🔗 Sesión en tiempo real</h3>
               {p2pMsg && (
-                <p style={{ fontSize: "0.8rem", color: "var(--primary)", margin: "0.5rem 0" }}>
-                  {p2pMsg}
-                </p>
+                <p style={{ fontSize: "0.8rem", color: "var(--primary)", margin: "0.5rem 0" }}>{p2pMsg}</p>
               )}
               {!p2pConnected ? (
                 <>
@@ -412,11 +360,7 @@ const GroupDetail: React.FC = () => {
                       style={{ flex: 1, padding: "4px 8px", border: "1px solid var(--primary)", borderRadius: 4 }}
                     />
                     <button
-                      style={{
-                        background: "var(--primary)", color: "white",
-                        border: "none", borderRadius: 4, padding: "4px 10px",
-                        cursor: "pointer", fontWeight: "bold"
-                      }}
+                      style={{ background: "var(--primary)", color: "white", border: "none", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: "bold" }}
                       onClick={handleJoinSession}
                     >
                       Unirse
@@ -426,22 +370,16 @@ const GroupDetail: React.FC = () => {
               ) : (
                 <>
                   <p style={{ fontSize: "0.85rem" }}>✅ Conectado</p>
-                  {inviteCode && (
-                    <p style={{ fontSize: "0.8rem" }}>
-                      Código: <strong>{inviteCode}</strong>
-                    </p>
-                  )}
+                  {inviteCode && <p style={{ fontSize: "0.8rem" }}>Código: <strong>{inviteCode}</strong></p>}
                 </>
               )}
             </div>
 
-          </div>{/* end sidebar-section */}
+          </div>
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/*  TAB: MIEMBROS                                                    */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* ── TAB MIEMBROS ── */}
       {activeTab === "members" && (
         <div className="card" style={{ marginTop: "1rem" }}>
           <h3>👥 Miembros del gremio</h3>
@@ -452,10 +390,8 @@ const GroupDetail: React.FC = () => {
               {members.map((m: any, i: number) => (
                 <li key={m.Id ?? i}>
                   <span>👤</span>
-                  <span>{m.Name ?? m.name ?? `Miembro ${i + 1}`}</span>
-                  {m.Role && (
-                    <small style={{ marginLeft: "auto", color: "#888" }}>{m.Role}</small>
-                  )}
+                  <span>{m.Name ?? `Miembro ${i + 1}`}</span>
+                  {m.Role && <small style={{ marginLeft: "auto", color: "#888" }}>{m.Role}</small>}
                 </li>
               ))}
             </ul>
@@ -463,16 +399,10 @@ const GroupDetail: React.FC = () => {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/*  MODAL: CREAR ÍTEM                                                */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* ── MODAL CREAR ── */}
       {showCreateForm && (
         <div
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 1000
-          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
           onClick={() => setShowCreateForm(false)}
         >
           <div
@@ -481,26 +411,19 @@ const GroupDetail: React.FC = () => {
             onClick={e => e.stopPropagation()}
           >
             <h3 style={{ marginBottom: "1rem" }}>
-              {createType === "Task" ? "✅ Nueva Tarea"
-                : createType === "Event" ? "📅 Nuevo Evento"
-                : "⚔️ Nuevo Reto"}
+              {createType === "Task" ? "✅ Nueva Tarea" : createType === "Event" ? "📅 Nuevo Evento" : "⚔️ Nuevo Reto"}
             </h3>
 
-            {/* Selector de tipo */}
             <div style={{ display: "flex", gap: 8, marginBottom: "1rem" }}>
               {(["Task", "Event", "Challenge"] as CreateType[]).map(t => (
                 <button
                   key={t}
                   onClick={() => setCreateType(t)}
                   style={{
-                    flex: 1,
-                    padding: "6px",
-                    border: "2px solid var(--primary)",
-                    borderRadius: 6,
+                    flex: 1, padding: "6px", border: "2px solid var(--primary)", borderRadius: 6,
                     background: createType === t ? "var(--primary)" : "white",
                     color: createType === t ? "white" : "var(--primary)",
-                    fontWeight: "bold",
-                    cursor: "pointer"
+                    fontWeight: "bold", cursor: "pointer"
                   }}
                 >
                   {t === "Task" ? "Tarea" : t === "Event" ? "Evento" : "Reto"}
@@ -508,7 +431,6 @@ const GroupDetail: React.FC = () => {
               ))}
             </div>
 
-            {/* Campos comunes */}
             <input
               placeholder="Nombre *"
               value={name}
@@ -523,15 +445,11 @@ const GroupDetail: React.FC = () => {
               style={{ width: "100%", marginBottom: 8, padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4, resize: "vertical" }}
             />
 
-            {/* Campos por tipo */}
             {createType === "Task" && (
               <div style={{ marginBottom: 8 }}>
                 <label style={{ fontSize: "0.85rem" }}>Prioridad: {priority}</label>
-                <input
-                  type="range" min={1} max={5} value={priority}
-                  onChange={e => setPriority(Number(e.target.value))}
-                  style={{ width: "100%" }}
-                />
+                <input type="range" min={1} max={5} value={priority}
+                  onChange={e => setPriority(Number(e.target.value))} style={{ width: "100%" }} />
               </div>
             )}
 
@@ -546,48 +464,31 @@ const GroupDetail: React.FC = () => {
 
             {createType === "Challenge" && (
               <>
-                <input
-                  placeholder="Condición de victoria"
-                  value={winCondition}
+                <input placeholder="Condición de victoria" value={winCondition}
                   onChange={e => setWinCondition(e.target.value)}
-                  style={{ width: "100%", marginBottom: 8, padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4 }}
-                />
-                <input
-                  placeholder="Condición de derrota"
-                  value={loseCondition}
+                  style={{ width: "100%", marginBottom: 8, padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4 }} />
+                <input placeholder="Condición de derrota" value={loseCondition}
                   onChange={e => setLoseCondition(e.target.value)}
-                  style={{ width: "100%", marginBottom: 8, padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4 }}
-                />
+                  style={{ width: "100%", marginBottom: 8, padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4 }} />
                 <div style={{ marginBottom: 8 }}>
                   <label style={{ fontSize: "0.85rem" }}>Meta: {statB}</label>
-                  <input
-                    type="number" min={1} value={statB}
+                  <input type="number" min={1} value={statB}
                     onChange={e => setStatB(Number(e.target.value))}
-                    style={{ width: "100%", padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4 }}
-                  />
+                    style={{ width: "100%", padding: "6px 10px", border: "1px solid #ccc", borderRadius: 4 }} />
                 </div>
               </>
             )}
 
-            {/* Botones */}
             <div style={{ display: "flex", gap: 8, marginTop: "1rem" }}>
               <button
                 onClick={handleCreateItem}
-                style={{
-                  flex: 2, background: "var(--primary)", color: "white",
-                  border: "none", borderRadius: 6, padding: "8px",
-                  fontWeight: "bold", cursor: "pointer"
-                }}
+                style={{ flex: 2, background: "var(--primary)", color: "white", border: "none", borderRadius: 6, padding: "8px", fontWeight: "bold", cursor: "pointer" }}
               >
                 Crear
               </button>
               <button
                 onClick={() => setShowCreateForm(false)}
-                style={{
-                  flex: 1, background: "white", color: "var(--primary)",
-                  border: "2px solid var(--primary)", borderRadius: 6, padding: "8px",
-                  fontWeight: "bold", cursor: "pointer"
-                }}
+                style={{ flex: 1, background: "white", color: "var(--primary)", border: "2px solid var(--primary)", borderRadius: 6, padding: "8px", fontWeight: "bold", cursor: "pointer" }}
               >
                 Cancelar
               </button>

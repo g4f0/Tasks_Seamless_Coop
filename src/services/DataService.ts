@@ -71,7 +71,6 @@ export class DataService {
   private constructor() {
     const loaded = this.loadFromStorage();
     if (!loaded) this.seedData();
-
     this.restoreCurrentUserFromStorage();
   }
 
@@ -90,7 +89,6 @@ export class DataService {
   emit = () => {
     this.saveToStorage();
     this.persistCurrentUserId();
-
     this.listeners.forEach((l) => {
       try { l(); } catch (e) { console.error("[DataService] listener error", e); }
     });
@@ -244,13 +242,20 @@ export class DataService {
 
     this.isApplyingRemoteUpdate = true;
     try {
+      // ── Reconstruir usuarios CON su id original ──
       const userMap = new Map<number, User>();
       for (const u of snapshot.users) {
         if (typeof u?.id !== "number") continue;
         const user = new User(u.name ?? "", u.password ?? "", u.description ?? "");
+        user.Id = u.id; // restaurar id guardado
         userMap.set(u.id, user);
       }
 
+      // Sincronizar el contador estático para evitar colisiones con nuevos usuarios
+      const maxUserId = Math.max(-1, ...Array.from(userMap.keys()));
+      User.syncNextId(maxUserId + 1);
+
+      // ── Reconstruir grupos ──
       const groupMap = new Map<number, Group>();
       for (const g of snapshot.groups) {
         if (typeof g?.id !== "number") continue;
@@ -276,6 +281,7 @@ export class DataService {
         groupMap.set(g.id, group);
       }
 
+      // ── Relaciones grupos ↔ usuarios ──
       for (const g of snapshot.groups) {
         const group = groupMap.get(g.id);
         if (!group) continue;
@@ -289,10 +295,10 @@ export class DataService {
         });
       }
 
+      // ── Relaciones usuarios ↔ amigos/grupos ──
       for (const u of snapshot.users) {
         const user = userMap.get(u.id);
         if (!user) continue;
-
         user.Friends = (u.friendIds ?? []).map((fid: number) => userMap.get(fid)).filter(Boolean) as User[];
         user.Groups = (u.groupIds ?? []).map((gid: number) => groupMap.get(gid)).filter(Boolean) as Group[];
       }
@@ -307,10 +313,7 @@ export class DataService {
       this.groups = Array.from(groupMap.values());
       this.friendRequests = requests;
 
-      // Prioridad de currentUser:
-      // 1) mantener usuario local previo si existe en snapshot
-      // 2) usar snapshot.currentUserId
-      // 3) null
+      // ── Restaurar currentUser ──
       if (previousCurrentUserId !== null && userMap.has(previousCurrentUserId)) {
         this.currentUser = userMap.get(previousCurrentUserId)!;
       } else if (snapshot.currentUserId !== null && userMap.has(snapshot.currentUserId)) {
@@ -423,7 +426,7 @@ export class DataService {
   }
 
   toggleTask(taskId: number, groupId?: number) {
-    const tasks = groupId
+    const tasks = groupId !== undefined
       ? this.groups.find(g => g.Id === groupId)?.Tasks ?? []
       : this.groups.flatMap(g => g.Tasks);
 

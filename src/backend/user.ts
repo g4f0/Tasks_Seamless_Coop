@@ -21,6 +21,7 @@ export class User {
         this.requests = [];
     }
 
+    public get Id(): number { return this.id; }
     public set Id(value: number) { this.id = value; }
 
     public static syncNextId(next: number) {

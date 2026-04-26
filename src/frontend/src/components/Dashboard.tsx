@@ -12,17 +12,19 @@ const Dashboard: React.FC = () => {
   const currentUser = dataService.currentUser;
   const userGroups = currentUser ? currentUser.Groups : [];
 
-  // Protegemos con flatMap que devuelva array vacío si algo falla
+  // Sin filtrar por Checked — mostramos todas y tachamos visualmente las completadas
   const tasks = userGroups.flatMap(g =>
-    (g?.Tasks ?? []).filter(t => !(t instanceof Challenge) && !(t instanceof Event) && t.Checked === 0)
-  ).slice(0, 3);
+    (g?.Tasks ?? [])
+      .filter(t => !(t instanceof Challenge) && !(t instanceof Event))
+      .map(t => ({ task: t, groupId: g.Id }))
+  ).slice(0, 5);
 
   const events = userGroups.flatMap(g =>
     (g?.Tasks ?? []).filter(t => t instanceof Event) as Event[]
   ).slice(0, 3);
 
-  const toggleTask = (id: number) => {
-    dataService.toggleTask(id);
+  const toggleTask = (taskId: number, groupId: number) => {
+    dataService.toggleTask(taskId, groupId);
   };
 
   return (
@@ -62,6 +64,9 @@ const Dashboard: React.FC = () => {
         <section className="dashboard-panel events-panel card">
           <div className="panel-header"><h2>📅 Próximos Eventos</h2></div>
           <div className="events-mini-list">
+            {events.length === 0 && (
+              <p style={{ color: "#888", fontSize: "0.85rem" }}>Sin eventos próximos.</p>
+            )}
             {events.map(ev => {
               const evDate = ev?.EndDate ? new Date(ev.EndDate) : null;
               return (
@@ -83,10 +88,22 @@ const Dashboard: React.FC = () => {
         <section className="dashboard-panel checklist-panel card">
           <div className="panel-header"><h2>📝 Tareas pendientes</h2></div>
           <div className="checklist-mini-list">
-            {tasks.map(task => (
-              <div key={task.Id} className={`check-item-mini ${task.Checked === 1 ? 'completed' : ''}`}>
-                <input type="checkbox" checked={task.Checked === 1} onChange={() => toggleTask(task.Id)} />
-                <span>{task.Name}</span>
+            {tasks.length === 0 && (
+              <p style={{ color: "#888", fontSize: "0.85rem" }}>Sin tareas.</p>
+            )}
+            {tasks.map(({ task, groupId }) => (
+              <div
+                key={`${groupId}-${task.Id}`}
+                className={`check-item-mini ${task.Checked === 1 ? 'completed' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={task.Checked === 1}
+                  onChange={() => toggleTask(task.Id, groupId)}
+                />
+                <span style={{ textDecoration: task.Checked === 1 ? 'line-through' : 'none', color: task.Checked === 1 ? '#aaa' : 'inherit' }}>
+                  {task.Name}
+                </span>
               </div>
             ))}
           </div>
@@ -95,6 +112,9 @@ const Dashboard: React.FC = () => {
         <section className="dashboard-panel challenges-panel card">
           <div className="panel-header"><h2>🏆 Retos Activos</h2></div>
           <div className="challenges-mini-list">
+            {userGroups.flatMap(g => (g?.Tasks ?? []).filter(t => t instanceof Challenge)).length === 0 && (
+              <p style={{ color: "#888", fontSize: "0.85rem" }}>Sin retos activos.</p>
+            )}
             {userGroups.flatMap(g => (g?.Tasks ?? []).filter(t => t instanceof Challenge)).map(challenge => {
               const ch = challenge as Challenge;
               const percent = ch.StatB ? (ch.StatA / ch.StatB) * 100 : 0;
