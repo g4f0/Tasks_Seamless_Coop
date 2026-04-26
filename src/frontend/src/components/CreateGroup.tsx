@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDataService } from '../../../services/DataContext';
-import { User } from '../../../backend/user';
 import { Group } from '../../../backend/group';
+import { User } from '../../../backend/user';
+import { useDataService } from '../../../services/DataContext';
 import './CreateGroup.css';
 
 const CreateGroup: React.FC = () => {
@@ -30,13 +30,26 @@ const CreateGroup: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newGroup = new Group(groupName, description);
+
+    if (!groupName.trim()) return;
+
+    const newGroup = new Group(groupName.trim(), description.trim());
+
+    // Añadimos invitados seleccionados
     selectedFriends.forEach(f => newGroup.Users.push(f));
-    if (dataService.currentUser) {
+    
+    // Añadimos creador (si existe)
+    if (dataService.currentUser && !newGroup.Users.some(u => u.Id === dataService.currentUser!.Id)) {
       newGroup.Users.push(dataService.currentUser);
     }
-    dataService.addGroup(newGroup);
-    navigate('/');
+
+    const res = dataService.addGroup(newGroup);
+
+    if (res.ok) {
+      navigate('/grupos');
+    } else {
+      alert(res.message);
+    }
   };
 
   return (
@@ -50,12 +63,25 @@ const CreateGroup: React.FC = () => {
         <form onSubmit={handleSubmit} className="medieval-form">
           <div className="input-group">
             <label>Nombre del Gremio</label>
-            <input type="text" placeholder="Ej: Los Guardianes del Sofá..." value={groupName} onChange={e => setGroupName(e.target.value)} required />
+            <input
+              type="text"
+              placeholder="Ej: Los Guardianes del Sofá..."
+              value={groupName}
+              onChange={e => setGroupName(e.target.value)}
+              required
+            />
           </div>
+
           <div className="input-group">
             <label>Crónica del Gremio (Descripción)</label>
-            <textarea placeholder="Escribe aquí los objetivos o reglas de tu alianza..." value={description} onChange={e => setDescription(e.target.value)} rows={3} />
+            <textarea
+              placeholder="Escribe aquí los objetivos o reglas de tu alianza..."
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+            />
           </div>
+
           <div className="input-group">
             <label>Convocar Aliados</label>
             <select className="medieval-select" onChange={handleSelectFriend} defaultValue="">
@@ -64,6 +90,7 @@ const CreateGroup: React.FC = () => {
                 <option key={friend.Id} value={friend.Id}>{friend.Name}</option>
               ))}
             </select>
+
             <div className="selected-friends-list">
               {selectedFriends.length === 0 && <p className="no-friends">Aún no has convocado a ningún aliado...</p>}
               {selectedFriends.map(friend => (
@@ -74,6 +101,7 @@ const CreateGroup: React.FC = () => {
               ))}
             </div>
           </div>
+
           <button type="submit" className="btn-submit-epic">FUNDAR GREMIO</button>
         </form>
       </div>

@@ -379,10 +379,42 @@ export class DataService {
     this.emit();
   }
 
-  addGroup(group: Group) {
-    this.groups.push(group);
-    this.currentUser?.Groups.push(group);
+  // =========================
+  // FIX PRINCIPAL APLICADO
+  // =========================
+  public addGroup(group: Group): { ok: boolean; message: string } {
+    if (!this.currentUser) return { ok: false, message: "No hay usuario logado." };
+
+    // 1) Dedupe de miembros por Id
+    const uniqueUsers: User[] = [];
+    const seen = new Set<number>();
+    for (const u of group.Users) {
+      if (!u) continue;
+      if (seen.has(u.Id)) continue;
+      seen.add(u.Id);
+      uniqueUsers.push(u);
+    }
+    group.Users = uniqueUsers;
+
+    // 2) Asegurar que el creador esté en el grupo
+    if (!group.Users.some(u => u.Id === this.currentUser!.Id)) {
+      group.Users.push(this.currentUser);
+    }
+
+    // 3) Registrar el grupo en el catálogo global si no existe
+    if (!this.groups.some(g => g.Id === group.Id)) {
+      this.groups.push(group);
+    }
+
+    // 4) RELACIÓN BIDIRECCIONAL: meter el grupo en User.Groups de cada miembro
+    for (const member of group.Users) {
+      if (!member.Groups.some(g => g.Id === group.Id)) {
+        member.Groups.push(group);
+      }
+    }
+
     this.emit();
+    return { ok: true, message: "Grupo creado correctamente." };
   }
 
   addTaskToGroup(groupId: number, payload: { name: string; description: string; priority: number; endDate: Date }) {
