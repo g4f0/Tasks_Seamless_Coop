@@ -19,8 +19,13 @@ const GroupDetail: React.FC = () => {
   useDataObserver();
   const { id } = useParams<{ id: string }>();
   const dataService = useDataService();
-  const groupId = String(id ?? "");
-  const group = dataService.groups.find(g => g.Id === Number(id));
+
+  const parsedId = Number(id);
+  const hasValidId = Number.isInteger(parsedId) && parsedId >= 0;
+
+  // CRÍTICO: resolver por ID real, nunca por índice de array
+  const group = hasValidId ? dataService.groups.find(g => g.Id === parsedId) : undefined;
+  const groupId = hasValidId ? String(parsedId) : "";
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [inputAmounts, setInputAmounts] = useState<Record<number, number>>({});
@@ -42,7 +47,6 @@ const GroupDetail: React.FC = () => {
   const publishingRef = useRef(false);
   const lastPublishRef = useRef(0);
 
-  // IMPORTANT: hooks always run, even if group is null
   const tasks = useMemo(
     () => (group ? group.Tasks.filter(t => !(t instanceof Challenge) && !(t instanceof Event)) : []),
     [group]
@@ -56,11 +60,11 @@ const GroupDetail: React.FC = () => {
     [group]
   );
 
-  // WS snapshots
   useEffect(() => {
+    if (!hasValidId) return;
+
     const unsub = onGroupSnapshot((gid, snapshot) => {
       if (gid !== groupId) return;
-      console.log("[P2P][WS] snapshot recibido", { gid, hasSnapshot: !!snapshot });
       try {
         dataService.replaceStateFromSnapshot(snapshot);
       } catch (e) {
@@ -68,10 +72,11 @@ const GroupDetail: React.FC = () => {
       }
     });
     return unsub;
-  }, [groupId, dataService]);
+  }, [groupId, dataService, hasValidId]);
 
-  // Publish local changes
   useEffect(() => {
+    if (!hasValidId) return;
+
     const unsub = dataService.subscribe(async () => {
       if (!p2pConnected) return;
       if (dataService.isApplyingRemoteUpdate) return;
@@ -82,10 +87,8 @@ const GroupDetail: React.FC = () => {
 
       publishingRef.current = true;
       try {
-        console.log("[P2P][PUBLISH] start", { groupId });
         await publishGroupSnapshot(groupId, dataService.exportSnapshot());
         lastPublishRef.current = Date.now();
-        console.log("[P2P][PUBLISH] ok", { groupId });
       } catch (e) {
         console.error("[P2P][PUBLISH] error", e);
       } finally {
@@ -93,10 +96,10 @@ const GroupDetail: React.FC = () => {
       }
     });
     return unsub;
-  }, [groupId, p2pConnected, dataService]);
+  }, [groupId, p2pConnected, dataService, hasValidId]);
 
-  // Poll bridge status
   useEffect(() => {
+    if (!hasValidId) return;
     let alive = true;
 
     const tick = async () => {
@@ -105,10 +108,9 @@ const GroupDetail: React.FC = () => {
         if (!alive) return;
         setP2pConnected(!!st.connected);
         if (st.inviteCode && !inviteCode) setInviteCode(st.inviteCode);
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setP2pConnected(false);
-        console.warn("[P2P][STATUS] error", e);
       }
     };
 
@@ -119,100 +121,76 @@ const GroupDetail: React.FC = () => {
       alive = false;
       clearInterval(t);
     };
-  }, [groupId, inviteCode]);
+  }, [groupId, inviteCode, hasValidId]);
 
   const hydrateFromP2POrPublishLocal = async () => {
-    console.log("[P2P][HYDRATE] fetching latest", { groupId });
+    if (!hasValidId) return;
     const latest = await getGroupLatest(groupId);
     if (latest?.snapshot) {
-      console.log("[P2P][HYDRATE] latest encontrado -> apply");
       dataService.replaceStateFromSnapshot(latest.snapshot);
       setP2pMsg("Estado del grupo cargado desde P2P.");
     } else {
-      console.log("[P2P][HYDRATE] sin latest -> publish local");
       await publishGroupSnapshot(groupId, dataService.exportSnapshot());
       setP2pMsg("Sin snapshot remoto. Publicado estado local.");
     }
   };
 
   const handleCreateSession = async () => {
+    if (!hasValidId) return;
     try {
-      console.log("[P2P][CREATE CLICK]", { groupId });
       const r = await createGroupSession(groupId);
       const code = r.inviteCode ?? "";
-      console.log("[P2P][CREATE OK]", { groupId, codeLen: code.length });
 
       setInviteCode(code);
       localStorage.setItem(`p2p-invite-${groupId}`, code);
       setP2pConnected(true);
 
       await hydrateFromP2POrPublishLocal();
-
-      const st = await getGroupStatus(groupId);
-      console.log("[P2P][STATUS AFTER CREATE]", st);
-
       setP2pMsg("Sesión creada. Comparte el código.");
     } catch (e: any) {
-      console.error("[P2P][CREATE ERROR]", e);
       setP2pMsg(`Error al crear sesión: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
     }
   };
 
   const handleJoinSession = async () => {
+    if (!hasValidId) return;
     try {
       const code = joinCode.trim();
-      console.log("[P2P][JOIN CLICK]", { groupId, codeLen: code.length });
-
       if (!code) {
         setP2pMsg("Pega un código de invitación.");
         return;
       }
 
       await joinGroupSession(groupId, code);
-      console.log("[P2P][JOIN OK]", { groupId });
-
       localStorage.setItem(`p2p-invite-${groupId}`, code);
       setInviteCode(code);
       setP2pConnected(true);
 
       await hydrateFromP2POrPublishLocal();
-
-      const st = await getGroupStatus(groupId);
-      console.log("[P2P][STATUS AFTER JOIN]", st);
-
       setP2pMsg("Unido al grupo P2P.");
     } catch (e: any) {
-      console.error("[P2P][JOIN ERROR]", e);
       setP2pMsg(`Error al unirte: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
     }
   };
 
   const handleJoinSaved = async () => {
+    if (!hasValidId) return;
     try {
       const saved = localStorage.getItem(`p2p-invite-${groupId}`) ?? "";
-      console.log("[P2P][REJOIN CLICK]", { groupId, codeLen: saved.length });
-
       if (!saved) {
         setP2pMsg("No hay código guardado para este grupo.");
         return;
       }
 
       await joinGroupSession(groupId, saved);
-      console.log("[P2P][REJOIN OK]", { groupId });
-
       setInviteCode(saved);
       setP2pConnected(true);
 
       await hydrateFromP2POrPublishLocal();
-
-      const st = await getGroupStatus(groupId);
-      console.log("[P2P][STATUS AFTER REJOIN]", st);
-
       setP2pMsg("Reconectado con código guardado.");
     } catch (e: any) {
-      console.error("[P2P][REJOIN ERROR]", e);
       setP2pMsg(`No se pudo reconectar: ${e?.message ?? "desconocido"}`);
       setP2pConnected(false);
     }
@@ -226,8 +204,7 @@ const GroupDetail: React.FC = () => {
       }
       await navigator.clipboard.writeText(inviteCode);
       setP2pMsg("Código copiado.");
-    } catch (e) {
-      console.error("[P2P][COPY ERROR]", e);
+    } catch {
       setP2pMsg("No se pudo copiar el código.");
     }
   };
@@ -284,6 +261,10 @@ const GroupDetail: React.FC = () => {
     setLoseCondition("");
     setStatB(100);
   };
+
+  if (!hasValidId) {
+    return <div>ID de gremio inválido</div>;
+  }
 
   if (!group) {
     return <div>Gremio no encontrado</div>;

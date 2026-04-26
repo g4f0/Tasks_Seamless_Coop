@@ -12,7 +12,11 @@ export class FriendRequest {
         this.accepted = false;
     }
 
-    public get Id(): number { return this.id; }
+    public set Id(value: number) { this.id = value; }
+
+    public static syncNextId(next: number) {
+      if (next > FriendRequest.nextId) FriendRequest.nextId = next;
+    }
 
     public get IdUserSrc(): number { return this.idUserSrc; }
     public set IdUserSrc(value: number) { this.idUserSrc = value; }

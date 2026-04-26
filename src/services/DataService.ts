@@ -6,7 +6,6 @@ import { FriendRequest } from "../backend/friendRequest";
 import { Event } from "../backend/event";
 
 type Listener = () => void;
-
 type TaskType = "Task" | "Challenge" | "Event";
 
 type TaskDTO = {
@@ -73,23 +72,11 @@ export class DataService {
     const loaded = this.loadFromStorage();
     if (!loaded) this.seedData();
 
-    // Restaurar usuario actual explícitamente (si existe)
-    const savedUid = localStorage.getItem(this.CURRENT_USER_KEY);
-    if (savedUid) {
-      const uid = Number(savedUid);
-      this.currentUser = this.users.find(u => u.Id === uid) ?? this.currentUser;
-    }
-
-    // Si no hay currentUser pero snapshot ya lo tenía, persistir clave auxiliar
-    if (this.currentUser) {
-      localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
-    }
+    this.restoreCurrentUserFromStorage();
   }
 
   static getInstance(): DataService {
-    if (!DataService.instance) {
-      DataService.instance = new DataService();
-    }
+    if (!DataService.instance) DataService.instance = new DataService();
     return DataService.instance;
   }
 
@@ -100,26 +87,33 @@ export class DataService {
     };
   }
 
-emit = () => {
-  this.saveToStorage();
-  if (this.currentUser) {
-    localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
-  } else {
-    localStorage.removeItem(this.CURRENT_USER_KEY);
+  emit = () => {
+    this.saveToStorage();
+    this.persistCurrentUserId();
+
+    this.listeners.forEach((l) => {
+      try { l(); } catch (e) { console.error("[DataService] listener error", e); }
+    });
+  };
+
+  private persistCurrentUserId() {
+    if (this.currentUser) localStorage.setItem(this.CURRENT_USER_KEY, String(this.currentUser.Id));
+    else localStorage.removeItem(this.CURRENT_USER_KEY);
   }
 
-  // evita que un listener rompa toda la app
-  this.listeners.forEach((l) => {
-    try { l(); } catch (e) { console.error("[DataService] listener error", e); }
-  });
-};
+  private restoreCurrentUserFromStorage() {
+    const raw = localStorage.getItem(this.CURRENT_USER_KEY);
+    if (!raw) return;
+    const uid = Number(raw);
+    if (!Number.isFinite(uid)) return;
+    const found = this.users.find(u => u.Id === uid);
+    if (found) this.currentUser = found;
+  }
 
   private saveToStorage() {
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.exportSnapshot()));
-    } catch {
-      // noop
-    }
+    } catch {}
   }
 
   private loadFromStorage(): boolean {
@@ -127,7 +121,7 @@ emit = () => {
       const raw = localStorage.getItem(this.STORAGE_KEY);
       if (!raw) return false;
       const snap = JSON.parse(raw) as AppSnapshot;
-      this.replaceStateFromSnapshot(snap);
+      this.replaceStateFromSnapshot(snap, { emit: false, persist: false, keepCurrentUser: false });
       return true;
     } catch {
       return false;
@@ -150,6 +144,7 @@ emit = () => {
     grupo1.Users.push(user1, user2);
     grupo2.Users.push(user1, user3);
     grupo3.Users.push(user1, user4);
+
     user1.Groups.push(grupo1, grupo2, grupo3);
     user2.Groups.push(grupo1);
     user3.Groups.push(grupo2);
@@ -159,8 +154,8 @@ emit = () => {
     const tarea2 = new Task(1, 1, "Limpiar cocina", "Dejar la cocina reluciente", new Date());
     const tarea3 = new Task(0, 3, "Pagar internet", "Pago mensual", new Date());
     const evento = new Event(2, "Reunión de piso", "Organizar limpieza mensual", new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
-
     grupo1.Tasks.push(tarea1, tarea2, tarea3, evento);
+
     tarea1.Users.push(user1);
     tarea2.Users.push(user2);
     tarea3.Users.push(user1);
@@ -229,117 +224,155 @@ emit = () => {
     };
   }
 
- private isValidSnapshot(snapshot: any): snapshot is AppSnapshot {
-  return !!snapshot
-    && Array.isArray(snapshot.users)
-    && Array.isArray(snapshot.groups)
-    && Array.isArray(snapshot.friendRequests)
-    && ("currentUserId" in snapshot);
-}
-
-replaceStateFromSnapshot(snapshot: AppSnapshot | any) {
-  if (!this.isValidSnapshot(snapshot)) {
-    console.warn("[DataService] Snapshot inválido, ignorado");
-    return;
+  private isValidSnapshot(snapshot: any): snapshot is AppSnapshot {
+    return !!snapshot
+      && Array.isArray(snapshot.users)
+      && Array.isArray(snapshot.groups)
+      && Array.isArray(snapshot.friendRequests)
+      && ("currentUserId" in snapshot);
   }
 
-  this.isApplyingRemoteUpdate = true;
-  try {
-    const userMap = new Map<number, User>();
-    for (const u of snapshot.users) {
-      if (typeof u?.id !== "number") continue;
-      const user = new User(u.name ?? "", u.password ?? "", u.description ?? "");
-      userMap.set(u.id, user);
-    }
+  replaceStateFromSnapshot(
+    snapshot: AppSnapshot | any,
+    opts: { emit?: boolean; persist?: boolean; keepCurrentUser?: boolean } = {}
+  ) {
+    const { emit = true, persist = true, keepCurrentUser = true } = opts;
 
-    const groupMap = new Map<number, Group>();
-    for (const g of snapshot.groups) {
-      if (typeof g?.id !== "number") continue;
-      const group = new Group(g.name ?? "", g.description ?? "");
+    if (!this.isValidSnapshot(snapshot)) return;
 
-      const tasks: Task[] = (g.tasks ?? []).map((t: any) => {
-        if (t?.type === "Challenge") {
-          return new Challenge(
-            t.checked ?? 0, t.priority ?? 1, t.name ?? "", t.description ?? "",
-            new Date(t.endDate ?? Date.now()), t.winCondition ?? "", t.loseCondition ?? "",
-            t.statA ?? 0, t.statB ?? 0
+    const previousCurrentUserId = keepCurrentUser ? this.currentUser?.Id ?? null : null;
+
+    this.isApplyingRemoteUpdate = true;
+    try {
+      const userMap = new Map<number, User>();
+      for (const u of snapshot.users) {
+        if (typeof u?.id !== "number") continue;
+        const user = new User(u.name ?? "", u.password ?? "", u.description ?? "");
+        userMap.set(u.id, user);
+      }
+
+      const groupMap = new Map<number, Group>();
+      for (const g of snapshot.groups) {
+        if (typeof g?.id !== "number") continue;
+        const group = new Group(g.name ?? "", g.description ?? "");
+
+        const tasks: Task[] = (g.tasks ?? []).map((t: any) => {
+          if (t?.type === "Challenge") {
+            return new Challenge(
+              t.checked ?? 0, t.priority ?? 1, t.name ?? "", t.description ?? "",
+              new Date(t.endDate ?? Date.now()), t.winCondition ?? "", t.loseCondition ?? "",
+              t.statA ?? 0, t.statB ?? 0
+            );
+          }
+          if (t?.type === "Event") {
+            return new Event(t.priority ?? 1, t.name ?? "", t.description ?? "", new Date(t.endDate ?? Date.now()));
+          }
+          return new Task(
+            t?.checked ?? 0, t?.priority ?? 1, t?.name ?? "", t?.description ?? "", new Date(t?.endDate ?? Date.now())
           );
-        }
-        if (t?.type === "Event") {
-          return new Event(t.priority ?? 1, t.name ?? "", t.description ?? "", new Date(t.endDate ?? Date.now()));
-        }
-        return new Task(t?.checked ?? 0, t?.priority ?? 1, t?.name ?? "", t?.description ?? "", new Date(t?.endDate ?? Date.now()));
+        });
+
+        group.Tasks = tasks;
+        groupMap.set(g.id, group);
+      }
+
+      for (const g of snapshot.groups) {
+        const group = groupMap.get(g.id);
+        if (!group) continue;
+
+        group.Users = (g.userIds ?? []).map((uid: number) => userMap.get(uid)).filter(Boolean) as User[];
+
+        (g.tasks ?? []).forEach((taskDTO: any, index: number) => {
+          const task = group.Tasks[index];
+          if (!task) return;
+          task.Users = (taskDTO.userIds ?? []).map((uid: number) => userMap.get(uid)).filter(Boolean) as User[];
+        });
+      }
+
+      for (const u of snapshot.users) {
+        const user = userMap.get(u.id);
+        if (!user) continue;
+
+        user.Friends = (u.friendIds ?? []).map((fid: number) => userMap.get(fid)).filter(Boolean) as User[];
+        user.Groups = (u.groupIds ?? []).map((gid: number) => groupMap.get(gid)).filter(Boolean) as Group[];
+      }
+
+      const requests = (snapshot.friendRequests ?? []).map((r: any) => {
+        const fr = new FriendRequest(r.idUserSrc ?? 0, r.idUserDest ?? 0);
+        fr.Accepted = !!r.accepted;
+        return fr;
       });
 
-      group.Tasks = tasks;
-      groupMap.set(g.id, group);
+      this.users = Array.from(userMap.values());
+      this.groups = Array.from(groupMap.values());
+      this.friendRequests = requests;
+
+      // Prioridad de currentUser:
+      // 1) mantener usuario local previo si existe en snapshot
+      // 2) usar snapshot.currentUserId
+      // 3) null
+      if (previousCurrentUserId !== null && userMap.has(previousCurrentUserId)) {
+        this.currentUser = userMap.get(previousCurrentUserId)!;
+      } else if (snapshot.currentUserId !== null && userMap.has(snapshot.currentUserId)) {
+        this.currentUser = userMap.get(snapshot.currentUserId)!;
+      } else {
+        this.currentUser = null;
+      }
+
+      if (persist) {
+        this.saveToStorage();
+        this.persistCurrentUserId();
+      }
+
+      if (emit) this.emit();
+    } catch (err) {
+      console.error("[DataService] Error aplicando snapshot remoto:", err);
+    } finally {
+      this.isApplyingRemoteUpdate = false;
     }
-
-    for (const g of snapshot.groups) {
-      const group = groupMap.get(g.id);
-      if (!group) continue;
-      group.Users = (g.userIds ?? []).map((uid: number) => userMap.get(uid)).filter(Boolean) as User[];
-
-      (g.tasks ?? []).forEach((taskDTO: any, index: number) => {
-        const task = group.Tasks[index];
-        if (!task) return;
-        task.Users = (taskDTO.userIds ?? []).map((uid: number) => userMap.get(uid)).filter(Boolean) as User[];
-      });
-    }
-
-    for (const u of snapshot.users) {
-      const user = userMap.get(u.id);
-      if (!user) continue;
-      user.Friends = (u.friendIds ?? []).map((fid: number) => userMap.get(fid)).filter(Boolean) as User[];
-      user.Groups = (u.groupIds ?? []).map((gid: number) => groupMap.get(gid)).filter(Boolean) as Group[];
-    }
-
-    const requests = (snapshot.friendRequests ?? []).map((r: any) => {
-      const fr = new FriendRequest(r.idUserSrc ?? 0, r.idUserDest ?? 0);
-      fr.Accepted = !!r.accepted;
-      return fr;
-    });
-
-    this.users = Array.from(userMap.values());
-    this.groups = Array.from(groupMap.values());
-    this.friendRequests = requests;
-    this.currentUser = snapshot.currentUserId !== null ? (userMap.get(snapshot.currentUserId) ?? null) : null;
-
-    this.emit();
-  } catch (err) {
-    console.error("[DataService] Error aplicando snapshot remoto:", err);
-    // NO rethrow -> evita pantalla blanca
-  } finally {
-    this.isApplyingRemoteUpdate = false;
   }
-}
+
   login(nameOrEmail: string, password: string): boolean {
     const normalized = nameOrEmail.trim().toLowerCase();
-    const user = this.users.find(
-      u => u.Name.toLowerCase() === normalized || `${u.Name.toLowerCase()}@ejemplo.com` === normalized
-    );
-    if (!user || user.Password !== password) return false;
+
+    const user = this.users.find(u => {
+      const uname = u.Name.toLowerCase();
+      return (
+        uname === normalized ||
+        `${uname}@ejemplo.com` === normalized ||
+        `${uname}@email.com` === normalized
+      );
+    });
+
+    if (!user) return false;
+    if (user.Password !== password) return false;
+
     this.currentUser = user;
-    localStorage.setItem(this.CURRENT_USER_KEY, String(user.Id));
+    this.persistCurrentUserId();
     this.emit();
     return true;
   }
 
   register(name: string, password: string): boolean {
-    const normalized = name.trim().toLowerCase();
-    if (!name.trim() || !password.trim()) return false;
+    const n = name.trim();
+    const p = password.trim();
+    if (!n || !p) return false;
+
+    const normalized = n.toLowerCase();
     if (this.users.some(u => u.Name.toLowerCase() === normalized)) return false;
-    const user = new User(name.trim(), password, "Nuevo aventurero.");
+
+    const user = new User(n, p, "Nuevo aventurero.");
     this.users.push(user);
     this.currentUser = user;
-    localStorage.setItem(this.CURRENT_USER_KEY, String(user.Id));
+
+    this.persistCurrentUserId();
     this.emit();
     return true;
   }
 
   logout() {
     this.currentUser = null;
-    localStorage.removeItem(this.CURRENT_USER_KEY);
+    this.persistCurrentUserId();
     this.emit();
   }
 
@@ -369,16 +402,7 @@ replaceStateFromSnapshot(snapshot: AppSnapshot | any) {
 
   addChallengeToGroup(
     groupId: number,
-    payload: {
-      name: string;
-      description: string;
-      priority: number;
-      endDate: Date;
-      winCondition: string;
-      loseCondition: string;
-      statA: number;
-      statB: number;
-    }
+    payload: { name: string; description: string; priority: number; endDate: Date; winCondition: string; loseCondition: string; statA: number; statB: number }
   ) {
     const group = this.groups.find(g => g.Id === groupId);
     if (!group) return;
@@ -405,7 +429,7 @@ replaceStateFromSnapshot(snapshot: AppSnapshot | any) {
 
     tasks.forEach(t => {
       if (t.Id === taskId) {
-        if (t instanceof Event) return; // Evento no checkeable manualmente
+        if (t instanceof Event) return;
         t.Checked = t.Checked === 1 ? 0 : 1;
       }
     });
@@ -426,9 +450,7 @@ replaceStateFromSnapshot(snapshot: AppSnapshot | any) {
   sendFriendRequest(targetUser: User): { ok: boolean; message: string } {
     if (!this.currentUser) return { ok: false, message: "Debes iniciar sesión." };
     if (targetUser.Id === this.currentUser.Id) return { ok: false, message: "No puedes añadirte a ti mismo." };
-    if (this.currentUser.Friends.some(f => f.Id === targetUser.Id)) {
-      return { ok: false, message: "Ya sois amigos." };
-    }
+    if (this.currentUser.Friends.some(f => f.Id === targetUser.Id)) return { ok: false, message: "Ya sois amigos." };
 
     const duplicate = this.friendRequests.some(
       r =>
@@ -450,16 +472,18 @@ replaceStateFromSnapshot(snapshot: AppSnapshot | any) {
 
   acceptFriendRequest(reqId: number) {
     const req = this.friendRequests.find(r => r.Id === reqId);
-    if (req) {
-      req.Accepted = true;
-      const srcUser = this.users.find(u => u.Id === req.IdUserSrc);
-      const destUser = this.users.find(u => u.Id === req.IdUserDest);
-      if (srcUser && destUser && !srcUser.Friends.some(f => f.Id === destUser.Id)) {
-        srcUser.Friends.push(destUser);
-        destUser.Friends.push(srcUser);
-      }
-      this.friendRequests = this.friendRequests.filter(r => r.Id !== reqId);
-      this.emit();
+    if (!req) return;
+
+    req.Accepted = true;
+    const srcUser = this.users.find(u => u.Id === req.IdUserSrc);
+    const destUser = this.users.find(u => u.Id === req.IdUserDest);
+
+    if (srcUser && destUser && !srcUser.Friends.some(f => f.Id === destUser.Id)) {
+      srcUser.Friends.push(destUser);
+      destUser.Friends.push(srcUser);
     }
+
+    this.friendRequests = this.friendRequests.filter(r => r.Id !== reqId);
+    this.emit();
   }
 }

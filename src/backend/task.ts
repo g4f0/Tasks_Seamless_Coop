@@ -21,7 +21,11 @@ export class Task {
         this.users = [];
     }
 
-    public get Id(): number { return this.id; }
+    public set Id(value: number) { this.id = value; }
+
+    public static syncNextId(next: number) {
+      if (next > Task.nextId) Task.nextId = next;
+    }
 
     public get Checked(): number { return this.checked; }
     public set Checked(value: number) { this.checked = value; }

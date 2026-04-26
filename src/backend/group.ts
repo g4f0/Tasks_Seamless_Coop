@@ -18,6 +18,11 @@ export class Group {
     }
 
     public get Id(): number { return this.id; }
+    public set Id(value: number) { this.id = value; }
+
+    public static syncNextId(next: number) {
+      if (next > Group.nextId) Group.nextId = next;
+    }
 
     public get Name(): string { return this.name; }
     public set Name(value: string) { this.name = value; }

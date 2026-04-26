@@ -18,8 +18,20 @@ const Auth: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    const loginInput = emailOrUser.trim();
+    const passwordInput = password.trim();
+
     if (isLogin) {
-      const ok = dataService.login(emailOrUser, password);
+      let ok = dataService.login(loginInput, passwordInput);
+
+      // Fallback mínimo: si metieron email no estándar, probar la parte antes de @
+      if (!ok && loginInput.includes('@')) {
+        const userPart = loginInput.split('@')[0].trim();
+        if (userPart) {
+          ok = dataService.login(userPart, passwordInput);
+        }
+      }
+
       if (!ok) {
         setError('Credenciales incorrectas.');
         return;
@@ -28,13 +40,13 @@ const Auth: React.FC = () => {
       return;
     }
 
-    if (password !== password2) {
+    if (passwordInput !== password2.trim()) {
       setError('Las contraseñas no coinciden.');
       return;
     }
 
-    const registerName = username.trim() || emailOrUser.split('@')[0];
-    const ok = dataService.register(registerName, password);
+    const registerName = username.trim() || loginInput.split('@')[0].trim();
+    const ok = dataService.register(registerName, passwordInput);
     if (!ok) {
       setError('No se pudo registrar (usuario ya existe o datos inválidos).');
       return;

@@ -1,23 +1,23 @@
-import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import './GroupsPage.css'
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useDataService, useDataObserver } from '../../../services/DataContext';
+import './GroupsPage.css';
 
 export default function GroupsPage() {
-  const navigate = useNavigate() // Hook para navegar
+  useDataObserver();
+  const navigate = useNavigate();
+  const dataService = useDataService();
+  const currentUser = dataService.currentUser;
 
-  const groups = [
-    { id: 1, name: '🏠 Piso 4', members: 4, tasks: 5, description: 'Gestión de tareas del hogar y gastos comunes.' },
-    { id: 2, name: '✈️ Viaje Verano', members: 8, tasks: 12, description: 'Planificación del viaje a la costa en Agosto.' },
-    { id: 3, name: '💪 Gym Friends', members: 5, tasks: 2, description: 'Seguimiento de entrenamientos y retos fitness.' }
-  ]
+  // Usar SIEMPRE los grupos reales del usuario logado (IDs reales, no índice visual)
+  const groups = currentUser ? currentUser.Groups : [];
 
   return (
     <div className="groups-container">
       <header className="groups-header">
         <h1>🛡️ Tus Gremios</h1>
-        {/* BOTÓN CONECTADO */}
-        <button 
-          className="btn-create-small" 
+        <button
+          className="btn-create-small"
           onClick={() => navigate('/crear-gremio')}
         >
           + Nuevo Gremio
@@ -25,27 +25,40 @@ export default function GroupsPage() {
       </header>
 
       <div className="groups-grid">
-        {groups.map(group => (
-          <div key={group.id} className="group-card-simple">
-            <div className="group-card-header">
-              <span className="group-emoji">{group.name.split(' ')[0]}</span>
-              <h2>{group.name.split(' ').slice(1).join(' ')}</h2>
-            </div>
-            
-            <p className="group-desc">{group.description}</p>
-            
-            <div className="group-card-footer">
-              <div className="group-meta">
-                <span>👥 {group.members}</span>
-                <span>✅ {group.tasks}</span>
+        {groups.map((group) => {
+          const emoji = group.Name.split(' ')[0] || '🛡️';
+          const title = group.Name.split(' ').slice(1).join(' ') || group.Name;
+
+          return (
+            <div key={group.Id} className="group-card-simple">
+              <div className="group-card-header">
+                <span className="group-emoji">{emoji}</span>
+                <h2>{title}</h2>
               </div>
-              <Link to={`/grupos/${group.id}`} className="btn-enter">
-                ENTRAR
-              </Link>
+
+              <p className="group-desc">{group.Description}</p>
+
+              <div className="group-card-footer">
+                <div className="group-meta">
+                  <span>👥 {group.Users.length}</span>
+                  <span>✅ {group.Tasks.length}</span>
+                </div>
+
+                {/* CRÍTICO: navegar con ID real */}
+                <Link to={`/grupos/${group.Id}`} className="btn-enter">
+                  ENTRAR
+                </Link>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {groups.length === 0 && (
+        <div className="empty-state card">
+          <p>No perteneces a ningún gremio todavía.</p>
+        </div>
+      )}
     </div>
-  )
+  );
 }
